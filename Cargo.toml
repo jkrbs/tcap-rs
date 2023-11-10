@@ -14,3 +14,4 @@ bytemuck = { version = "1.13.1", features = [ "derive" ] }
 serde = "1.0.188"
 log = "0.4.20"
 simple_logger = "4.2.0"
+clap = { version = "4.4.7", features = ["derive"] }

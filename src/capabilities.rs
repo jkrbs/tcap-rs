@@ -3,7 +3,7 @@ pub mod tcap {
     use tokio::net::UdpSocket;
     use log::*;
 
-    use crate::packet_types::tcap::{IpAddress, InsertCapHeader};
+    use crate::{packet_types::tcap::{IpAddress, InsertCapHeader}, Config};
 
     #[derive(Clone, Copy, Debug)]
     pub struct Capability {
@@ -19,10 +19,10 @@ pub mod tcap {
             }
         }
 
-        pub async fn delegate(&self, delegatee: IpAddress) -> Result<(), tokio::io::Error> {
+        pub async fn delegate(&self, conf:Config, delegatee: IpAddress) -> Result<(), tokio::io::Error> {
             debug!("opening udp socket to {:?}", delegatee);
             debug!("socket addr pass to bind: {:?}", delegatee.to_socket_addrs());
-            let socket = UdpSocket::bind("0.0.0.0:1234").await.unwrap();
+            let socket = UdpSocket::bind(conf.address).await.unwrap();
             socket.connect(delegatee.to_socket_addrs()).await?;
             debug!("connected");
             let packet: Box<[u8; std::mem::size_of::<InsertCapHeader>()]>= InsertCapHeader::construct(&self, delegatee, 
