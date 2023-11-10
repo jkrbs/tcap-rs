@@ -66,7 +66,7 @@ pub mod tcap {
 
     #[repr(u32)]
     #[derive(Clone, Copy)]
-    enum cmd_type {
+    enum CmdType {
         Nop= 0,
         CapGetInfo = 1,
         CapIsSame = 2,
@@ -101,10 +101,31 @@ pub mod tcap {
     }
 
     #[repr(C, packed)]
-    #[derive(Copy, Clone, Pod, Zeroable)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub struct  NOPRequestHeader {
         common: CommonHeader,
         info: u64
+    }
+
+    impl NOPRequestHeader {
+        pub fn construct(cap: Capability, info: u64) -> NOPRequestHeader {
+            NOPRequestHeader {
+                common: CommonHeader { cmd: CmdType::Nop as u32, cap_id: cap.cap_id },
+                info,
+            }
+        }
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<NOPRequestHeader>()]>> for NOPRequestHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<NOPRequestHeader>()]> {
+            debug!("transforming {:?} into [u8; {:?}]", self, std::mem::size_of::<NOPRequestHeader>());
+            let bytes: [u8; std::mem::size_of::<NOPRequestHeader>()] = unsafe {
+                std::mem::transmute_copy(&self)
+            };
+            debug!("result: {:?}", bytes);
+
+            Box::new(bytes)
+         }
     }
 
     #[repr(C, packed)]
@@ -119,7 +140,7 @@ pub mod tcap {
     impl InsertCapHeader {
         pub fn construct(cap: &Capability, delegatee: IpAddress, owner: IpAddress) -> InsertCapHeader {
             InsertCapHeader {
-                common: CommonHeader { cmd: cmd_type::CapDelegate as u32, cap_id: cap.cap_id },
+                common: CommonHeader { cmd: CmdType::CapDelegate as u32, cap_id: cap.cap_id },
                 cap_owner_ip: delegatee,
                 cap_id: cap.cap_id, 
                 object_owner: owner
@@ -137,6 +158,26 @@ pub mod tcap {
 
             Box::new(bytes)
          }
+    }
+
+    mod tests {
+        use super::IpAddress;
+
+        #[test]
+        fn test_create_ip_addr_object_from_string() {
+            let obj = IpAddress::from("10.0.0.1:1234");
+            assert!(obj.port == 1234);
+            assert!(obj.address == [10,0,0,1]);
+            assert!(obj.netmask == [255,255,255,255]); // default value for netmask
+        }
+
+        #[test]
+        fn test_create_ip_addr_object_with_netmask() {
+            let obj = IpAddress::from("10.0.0.1/24:1012");
+            assert!(obj.port == 0);
+            assert!(obj.address == [10,0,0,1]);
+            assert!(obj.netmask == [255,255,255,0]);
+        }
     }
 
 }
