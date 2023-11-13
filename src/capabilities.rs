@@ -23,6 +23,7 @@ pub mod tcap {
             debug!("opening udp socket to {:?}", delegatee);
             debug!("socket addr pass to bind: {:?}", delegatee.to_socket_addrs());
             let socket = UdpSocket::bind(conf.address).await.unwrap();
+
             socket.connect(delegatee.to_socket_addrs()).await?;
             debug!("connected");
             let packet: Box<[u8; std::mem::size_of::<InsertCapHeader>()]>= InsertCapHeader::construct(&self, delegatee, 
