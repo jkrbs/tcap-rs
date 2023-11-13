@@ -1,20 +1,20 @@
+pub mod capabilities;
 pub mod packet_types;
 pub mod service;
-pub mod capabilities;
 
 use log::*;
 use simple_logger::SimpleLogger;
 
 use clap::Parser;
 
-use crate::service::tcap::*;
 use crate::capabilities::tcap::*;
 use crate::packet_types::tcap::*;
+use crate::service::tcap::*;
 
 #[derive(Parser, Clone, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Config {
-    /// The Network Interface to bind 
+    /// The Network Interface to bind
     #[arg(short, long)]
     interface: String,
 
@@ -24,12 +24,16 @@ struct Config {
 
     /// Address of the switch control plane (including port number)
     #[arg(short, long)]
-    switch_addr: String
+    switch_addr: String,
 }
 
 impl Config {
     fn clone(&self) -> Self {
-        Self { interface: self.interface.clone(), address: self.address.clone(), switch_addr: self.switch_addr.clone() }
+        Self {
+            interface: self.interface.clone(),
+            address: self.address.clone(),
+            switch_addr: self.switch_addr.clone(),
+        }
     }
 }
 
@@ -38,7 +42,7 @@ async fn main() -> Result<(), ()> {
     SimpleLogger::new().init().unwrap();
 
     let conf: Config = Config::parse();
-    let service= Service::new(conf.clone()).await;
+    let service = Service::new(conf.clone()).await;
     let s = service.clone();
     let service_handle = tokio::spawn(async move {
         debug!("starting service thread");
