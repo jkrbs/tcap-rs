@@ -1,9 +1,11 @@
 pub mod tcap {
+    use std::string;
+
     use rand::Rng;
     use tokio::net::UdpSocket;
     use log::*;
 
-    use crate::{packet_types::tcap::{IpAddress, InsertCapHeader}, Config};
+    use crate::{packet_types::tcap::{IpAddress, InsertCapHeader, RevokeCapHeader}, Config, service::tcap::{Service, SendRequest}};
 
     #[derive(Clone, Copy, Debug)]
     pub struct Capability {
@@ -19,20 +21,39 @@ pub mod tcap {
             }
         }
 
-        pub async fn delegate(&self, conf:Config, delegatee: IpAddress) -> Result<(), tokio::io::Error> {
-            debug!("opening udp socket to {:?}", delegatee);
-            debug!("socket addr pass to bind: {:?}", delegatee.to_socket_addrs());
-            let socket = UdpSocket::bind(conf.address).await.unwrap();
-
-            socket.connect(delegatee.to_socket_addrs()).await?;
-            debug!("connected");
+        pub(crate) async fn delegate(&self, s:Service, delegatee: IpAddress) -> Result<(), tokio::io::Error> {
+            let address = s.config.address.clone();
             let packet: Box<[u8; std::mem::size_of::<InsertCapHeader>()]>= InsertCapHeader::construct(&self, delegatee, 
-                IpAddress::from(socket.local_addr().unwrap())).into();
+                IpAddress::from(address.as_str())).into();
+                debug!("packet to be send: {:?}", packet);
 
+                let dest: String = delegatee.into();
+                s.send(SendRequest {
+                    dest,
+                    data: packet,
+                }).await;
+                Ok(())
+        }
+
+        pub(crate) async fn revoke(&self, s: Service) -> tokio::io::Result<()> {
+          /*   debug!("opening udp socket to {:?}", conf.switch_addr);
+            debug!("socket addr pass to bind: {:?}", conf.switch_addr.as_str());
+            let socket = match UdpSocket::bind(conf.address.clone()).await {
+                Ok(socket) => socket,
+                Err(e) => {
+                    error!("Error while opening listener socket {:?}", e);
+                    panic!("Exiting...")
+                }
+            }; */
+            let address = s.config.address.clone();
+            let packet: Box<[u8; std::mem::size_of::<RevokeCapHeader>()]> = RevokeCapHeader::construct(self, address.as_str().into()).into();
+            
             debug!("packet to be send: {:?}", packet);
 
-            let sent_bytes = socket.send(packet.as_ref()).await.unwrap();
-            debug!("sent {:?} bytes over udp socket", sent_bytes);
+            s.send(SendRequest {
+                dest: s.config.switch_addr.clone(),
+                data: packet,
+            }).await;
             Ok(())
         }
     }

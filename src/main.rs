@@ -21,11 +21,15 @@ struct Config {
     /// Address to bind to (including port number)
     #[arg(short, long)]
     address: String,
+
+    /// Address of the switch control plane (including port number)
+    #[arg(short, long)]
+    switch_addr: String
 }
 
 impl Config {
     fn clone(&self) -> Self {
-        Self { interface: self.interface.clone(), address: self.address.clone()}
+        Self { interface: self.interface.clone(), address: self.address.clone(), switch_addr: self.switch_addr.clone() }
     }
 }
 
@@ -37,14 +41,15 @@ async fn main() -> Result<(), ()> {
     let service= Service::new(conf.clone()).await;
     let s = service.clone();
     let service_handle = tokio::spawn(async move {
-        s.run().await.unwrap();
+        debug!("starting service thread");
+        let _ = s.run().await.unwrap();
     });
 
     debug!("starting tcap-rs main");
     let c1 = Capability::create().await;
     debug!("created cap c1: {:?}", c1);
 
-    let _ = c1.delegate(conf, IpAddress::from("10.0.0.9:1002")).await;
+    let _ = c1.delegate(service, IpAddress::from("10.0.0.9:1002")).await;
 
     debug!("delegation of c1 finished");
 

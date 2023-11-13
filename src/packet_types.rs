@@ -1,16 +1,16 @@
 pub mod tcap {
     use log::debug;
     use tokio::net::{ToSocketAddrs, unix::SocketAddr};
-    use std::{net::{SocketAddrV4, Ipv4Addr}, str::FromStr};
+    use std::{net::{SocketAddrV4, Ipv4Addr}, str::FromStr, fmt::format};
     use crate::capabilities::tcap::Capability;
     use bytemuck::*;
 
     #[repr(C)]
     #[derive(Clone, Copy, Pod, Zeroable, Debug)]
     pub struct IpAddress {
-        address: [u8; 4],
-        netmask: [u8; 4],
-        port: u16
+        pub address: [u8; 4],
+        pub netmask: [u8; 4],
+        pub port: u16
     }
 
     impl IpAddress {
@@ -63,6 +63,12 @@ pub mod tcap {
             Self { address, netmask, port }
         }
     }
+    
+    impl From<IpAddress> for String {
+        fn from(value: IpAddress) -> Self {
+            format!("{}.{}.{}.{}:{}", value.address[0],value.address[1],value.address[2],value.address[3], value.port)
+        }
+    }
 
     #[repr(u32)]
     #[derive(Clone, Copy)]
@@ -90,6 +96,8 @@ pub mod tcap {
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     struct CommonHeader {
+        size: u32,
+        stream_id: u32,
         cmd: u32,
         cap_id: u64
     }
@@ -109,8 +117,10 @@ pub mod tcap {
 
     impl NOPRequestHeader {
         pub fn construct(cap: Capability, info: u64) -> NOPRequestHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
             NOPRequestHeader {
-                common: CommonHeader { cmd: CmdType::Nop as u32, cap_id: cap.cap_id },
+                common: CommonHeader { size: 0, cmd: CmdType::Nop as u32, stream_id, cap_id: cap.cap_id },
                 info,
             }
         }
@@ -118,12 +128,9 @@ pub mod tcap {
 
     impl Into<Box<[u8; std::mem::size_of::<NOPRequestHeader>()]>> for NOPRequestHeader {
         fn into(self) -> Box<[u8; std::mem::size_of::<NOPRequestHeader>()]> {
-            debug!("transforming {:?} into [u8; {:?}]", self, std::mem::size_of::<NOPRequestHeader>());
             let bytes: [u8; std::mem::size_of::<NOPRequestHeader>()] = unsafe {
                 std::mem::transmute_copy(&self)
             };
-            debug!("result: {:?}", bytes);
-
             Box::new(bytes)
          }
     }
@@ -139,8 +146,10 @@ pub mod tcap {
 
     impl InsertCapHeader {
         pub fn construct(cap: &Capability, delegatee: IpAddress, owner: IpAddress) -> InsertCapHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
             InsertCapHeader {
-                common: CommonHeader { cmd: CmdType::CapDelegate as u32, cap_id: cap.cap_id },
+                common: CommonHeader { size: 0, cmd: CmdType::CapDelegate as u32, stream_id, cap_id: cap.cap_id },
                 cap_owner_ip: delegatee,
                 cap_id: cap.cap_id, 
                 object_owner: owner
@@ -150,12 +159,39 @@ pub mod tcap {
 
     impl Into<Box<[u8; std::mem::size_of::<InsertCapHeader>()]>> for InsertCapHeader {
         fn into(self) -> Box<[u8; std::mem::size_of::<InsertCapHeader>()]> {
-            debug!("transforming {:?} into [u8; {:?}]", self, std::mem::size_of::<InsertCapHeader>());
             let bytes: [u8; std::mem::size_of::<InsertCapHeader>()] = unsafe {
                 std::mem::transmute_copy(&self)
             };
-            debug!("result: {:?}", bytes);
+            Box::new(bytes)
+         }
+    }
 
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
+    pub(crate) struct  RevokeCapHeader {
+        common: CommonHeader,
+        cap_owner_ip: IpAddress,
+        cap_id: u64,
+    }
+
+    impl RevokeCapHeader {
+        pub fn construct(cap: &Capability, owner: IpAddress) -> RevokeCapHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
+
+            RevokeCapHeader {
+                common: CommonHeader { size: 0, cmd: CmdType::CapRevoke as u32, stream_id, cap_id: cap.cap_id },
+                cap_id: cap.cap_id, 
+                cap_owner_ip: owner
+            }
+        }
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<RevokeCapHeader>()]>> for RevokeCapHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<RevokeCapHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<RevokeCapHeader>()] = unsafe {
+                std::mem::transmute_copy(&self)
+            };
             Box::new(bytes)
          }
     }
