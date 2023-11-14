@@ -1,6 +1,7 @@
 pub mod capabilities;
 pub mod packet_types;
 pub mod service;
+pub mod cap_table;
 
 use log::*;
 use simple_logger::SimpleLogger;
@@ -54,6 +55,7 @@ async fn main() -> Result<(), ()> {
     Ok(())
 }
 
+#[cfg(test)]
 mod tests {
     use log::debug;
     use simple_logger::SimpleLogger;

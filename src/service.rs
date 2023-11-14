@@ -3,11 +3,14 @@ pub mod tcap {
     use std::sync::Arc;
     use std::{io, usize};
 
-    use crate::Config;
-    use crate::packet_types::tcap::CommonHeader;
+    use crate::{Config, cap_table};
+    use crate::cap_table::tcap::cap_table::CapTable;
+    use crate::capabilities::tcap::Capability;
+    use crate::packet_types::tcap::{CommonHeader, CmdType, RevokeCapHeader, InsertCapHeader};
     use log::{debug, info};
     use tokio::net::UdpSocket;
     use tokio::sync::{mpsc, Mutex, Notify};
+    
 
     #[derive(Clone, Debug)]
     pub struct Service {
@@ -16,7 +19,8 @@ pub mod tcap {
         pub config: Config,
         socket: Arc<UdpSocket>,
         responses: Arc<Mutex<HashMap<u32, Response>>>,
-        response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>
+        response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>,
+        cap_table: CapTable
     }
 
     #[derive(Debug, Clone)]
@@ -59,13 +63,16 @@ pub mod tcap {
             let responses = Arc::new(Mutex::new(HashMap::new()));
             let response_notifiers = Arc::new(Mutex::new(HashMap::new()));
 
+            let cap_table = CapTable::new().await;
+
             Service {
                 send_channel,
                 receiver,
                 config,
                 socket,
                 responses,
-                response_notifiers
+                response_notifiers,
+                cap_table
             }
         }
 
@@ -114,7 +121,9 @@ pub mod tcap {
                                 debug!("notified stream id {:?}", stream_id);
                             },
                             None => {
-                                info!("stream {:?} is not waited for", stream_id);
+                                info!("stream {:?} is not waited for. Trying to parse unsolicited packet", stream_id);
+
+                                s.parse(buf);
                             },
                         };
                         
@@ -142,6 +151,34 @@ pub mod tcap {
                 return self.responses.lock().await.remove(&stream_id)
             }
             None 
+        }
+
+        async fn parse(&self, packet: Vec<u8>) {
+            assert!(packet.len() >= std::mem::size_of::<CommonHeader>(), "Received packets must includethe common header");
+            let command: u32 = *bytemuck::from_bytes(&packet[8..12]);
+            match CmdType::from(command) {
+                CmdType::Nop => todo!(),
+                CmdType::CapGetInfo => todo!(),
+                CmdType::CapIsSame => todo!(),
+                CmdType::CapDiminish => todo!(),
+                CmdType::CapClose => todo!(),
+                CmdType::CapRevoke => {
+                    let hdr = RevokeCapHeader::from(packet);
+                    let _ = self.cap_table.remove(hdr.cap_id).await;
+                },
+                CmdType::RequestCreate => todo!(),
+                CmdType::RequestInvoke => todo!(),
+                CmdType::RequestReceive => todo!(),
+                CmdType::None => todo!(),
+                CmdType::InsertCap => {
+                    let hdr = InsertCapHeader::from(packet);
+                    let _ = self.cap_table.insert(Capability::from(hdr)).await;
+                },
+                CmdType::CapDelegate => {
+                    todo!()
+                }
+            }
+
         }
     }
 }

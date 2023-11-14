@@ -93,7 +93,7 @@ pub mod tcap {
 
     #[repr(u32)]
     #[derive(Clone, Copy)]
-    enum CmdType {
+    pub enum CmdType {
         Nop = 0,
         CapGetInfo = 1,
         CapIsSame = 2,
@@ -112,6 +112,26 @@ pub mod tcap {
         //nighP4 Implementation specific OP Codes
         InsertCap = 64,
         CapDelegate = 65,
+    }
+
+    impl From<u32> for CmdType {
+        fn from(value: u32) -> Self {
+            match value {
+                0 => CmdType::Nop,
+                1 => CmdType::CapGetInfo,
+                2 => CmdType::CapIsSame,
+                3 => CmdType::CapDiminish,
+                5 => CmdType::CapClose,
+                6 => CmdType::CapRevoke,
+               13 => CmdType::RequestCreate,
+               14 => CmdType::RequestInvoke,
+               16 => CmdType::RequestReceive,
+               32 => CmdType::None,
+               64 => CmdType::InsertCap,
+               65 => CmdType::CapDelegate,
+               _  => CmdType::None
+            }
+        }
     }
 
     #[repr(C, packed)]
@@ -163,10 +183,11 @@ pub mod tcap {
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub struct InsertCapHeader {
-        common: CommonHeader,
-        cap_owner_ip: IpAddress,
-        cap_id: u64,
-        object_owner: IpAddress,
+        pub common: CommonHeader,
+        pub cap_owner_ip: IpAddress,
+        pub cap_id: u64,
+        pub cap_type: u8,
+        pub object_owner: IpAddress,
     }
 
     impl InsertCapHeader {
@@ -186,6 +207,7 @@ pub mod tcap {
                 },
                 cap_owner_ip: delegatee,
                 cap_id: cap.cap_id,
+                cap_type: cap.cap_type.into(),
                 object_owner: owner,
             }
         }
@@ -199,12 +221,24 @@ pub mod tcap {
         }
     }
 
+    impl From<Vec<u8>> for InsertCapHeader {
+        fn from(value: Vec<u8>) -> Self {
+            *bytemuck::from_bytes(&value)
+        }
+    }
+
+    impl From<Vec<u8>> for RevokeCapHeader {
+        fn from(value: Vec<u8>) -> Self {
+            *bytemuck::from_bytes(&value)
+        }
+    }
+
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct RevokeCapHeader {
         common: CommonHeader,
-        cap_owner_ip: IpAddress,
-        cap_id: u64,
+        pub cap_owner_ip: IpAddress,
+        pub cap_id: u64,
     }
 
     impl RevokeCapHeader {
