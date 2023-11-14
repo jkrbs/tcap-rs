@@ -50,13 +50,37 @@ async fn main() -> Result<(), ()> {
     });
 
     debug!("starting tcap-rs main");
-    let c1 = Capability::create().await;
-    debug!("created cap c1: {:?}", c1);
-
-    let _ = c1.delegate(service, IpAddress::from("10.0.0.9:1002")).await;
-
-    debug!("delegation of c1 finished");
-
     service_handle.await.unwrap();
     Ok(())
+}
+
+mod tests {
+    use log::debug;
+    use simple_logger::SimpleLogger;
+
+    use crate::{Config, service::tcap::Service, capabilities::tcap::Capability, packet_types::tcap::IpAddress};
+
+    #[tokio::test]
+    async fn test_delegate() {
+        SimpleLogger::new().init().unwrap();
+
+        let conf: Config = Config { interface: "veth250".to_string(), address:"10.0.0.9:2234".to_string(), switch_addr: "10.0.0.1".to_string() };
+        let service = Service::new(conf.clone()).await;
+        let s = service.clone();
+        let service_handle = tokio::spawn(async move {
+            debug!("starting service thread");
+            let _ = s.run().await.unwrap();
+        });
+    
+        debug!("starting tcap-rs main");
+        let c1 = Capability::create().await;
+        debug!("created cap c1: {:?}", c1);
+    
+        let _ = c1.delegate(service, IpAddress::from("10.0.0.9:1234")).await;
+    
+        debug!("delegation of c1 finished");
+    
+        service_handle.await.unwrap();
+        ()
+    }
 }
