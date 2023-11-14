@@ -116,7 +116,7 @@ pub mod tcap {
 
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
-    struct CommonHeader {
+    pub(crate) struct CommonHeader {
         size: u32,
         stream_id: u32,
         cmd: u32,

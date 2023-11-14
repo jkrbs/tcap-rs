@@ -35,31 +35,19 @@ pub mod tcap {
             debug!("packet to be send: {:?}", packet);
 
             let dest: String = delegatee.into();
-            s.send(SendRequest { dest, data: packet }).await;
+            let _ = s.send(SendRequest::new(dest,packet), false).await;
             Ok(())
         }
 
         pub(crate) async fn revoke(&self, s: Service) -> tokio::io::Result<()> {
-            /*   debug!("opening udp socket to {:?}", conf.switch_addr);
-            debug!("socket addr pass to bind: {:?}", conf.switch_addr.as_str());
-            let socket = match UdpSocket::bind(conf.address.clone()).await {
-                Ok(socket) => socket,
-                Err(e) => {
-                    error!("Error while opening listener socket {:?}", e);
-                    panic!("Exiting...")
-                }
-            }; */
             let address = s.config.address.clone();
             let packet: Box<[u8; std::mem::size_of::<RevokeCapHeader>()]> =
                 RevokeCapHeader::construct(self, address.as_str().into()).into();
 
             debug!("packet to be send: {:?}", packet);
 
-            s.send(SendRequest {
-                dest: s.config.switch_addr.clone(),
-                data: packet,
-            })
-            .await;
+            let resp = s.send(SendRequest::new(s.config.switch_addr.clone(),packet), false).await;
+
             Ok(())
         }
     }
