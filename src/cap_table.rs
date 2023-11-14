@@ -10,16 +10,14 @@ pub mod tcap {
 
         #[derive(Debug, Clone)]
         pub(crate) struct CapTable {
-            caps: Arc<Mutex<HashMap<CapID, Capability>>>
+            caps: Arc<Mutex<HashMap<CapID, Capability>>>,
         }
 
         impl CapTable {
             pub(crate) async fn new() -> Self {
                 let caps = Arc::new(Mutex::new(HashMap::new()));
 
-                Self {
-                    caps
-                }
+                Self { caps }
             }
 
             pub(crate) async fn insert(&self, cap: Capability) {

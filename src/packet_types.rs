@@ -123,13 +123,13 @@ pub mod tcap {
                 3 => CmdType::CapDiminish,
                 5 => CmdType::CapClose,
                 6 => CmdType::CapRevoke,
-               13 => CmdType::RequestCreate,
-               14 => CmdType::RequestInvoke,
-               16 => CmdType::RequestReceive,
-               32 => CmdType::None,
-               64 => CmdType::InsertCap,
-               65 => CmdType::CapDelegate,
-               _  => CmdType::None
+                13 => CmdType::RequestCreate,
+                14 => CmdType::RequestInvoke,
+                16 => CmdType::RequestReceive,
+                32 => CmdType::None,
+                64 => CmdType::InsertCap,
+                65 => CmdType::CapDelegate,
+                _ => CmdType::None,
             }
         }
     }
