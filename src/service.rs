@@ -14,7 +14,7 @@ pub mod tcap {
         send_channel: Arc<Mutex<mpsc::Sender<SendRequest>>>,
         receiver: Arc<Mutex<mpsc::Receiver<SendRequest>>>,
         pub config: Config,
-        socket: Arc<Mutex<UdpSocket>>,
+        socket: Arc<UdpSocket>,
         responses: Arc<Mutex<HashMap<u32, Response>>>,
         response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>
     }
@@ -49,9 +49,9 @@ pub mod tcap {
         pub async fn new(config: Config) -> Service {
             let (send_channel, receiver) = mpsc::channel::<SendRequest>(256);
             info!("Binding UDP Socket to {:?}", config.address);
-            let socket = Arc::new(Mutex::new(
+            let socket = Arc::new(
                 UdpSocket::bind(config.address.clone()).await.unwrap(),
-            ));
+            );
 
             let send_channel = Arc::new(Mutex::new(send_channel));
             let receiver = Arc::new(Mutex::new(receiver));
@@ -80,10 +80,9 @@ pub mod tcap {
 
                         // s.response_notifiers.lock().await.insert(packet.stream_id, packet.response_notification.clone());
 
-                        let s = s.socket.lock().await;
                         debug!("Connecting to {:?}", packet.dest);
-                        s.connect(packet.dest).await.unwrap();
-                        match s.send(&packet.data).await {
+                        s.socket.connect(packet.dest).await.unwrap();
+                        match s.socket.send(&packet.data).await {
                             Ok(b) => debug!("sent {:?} bytes", b),
                             Err(_) => panic!("failed to send network packet"),
                         };
@@ -99,7 +98,7 @@ pub mod tcap {
                 loop {
                 let mut buf = vec![];
 
-                match s.socket.lock().await.recv_buf(&mut buf).await {
+                match s.socket.recv_buf(&mut buf).await {
                     Ok(received_bytes) => {
                         debug!("received {:?} bytes: {:?}", received_bytes, buf);
                         
