@@ -19,7 +19,7 @@ pub mod tcap {
         socket: Arc<UdpSocket>,
         responses: Arc<Mutex<HashMap<u32, Response>>>,
         response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>,
-        cap_table: CapTable,
+        pub(crate) cap_table: CapTable,
     }
 
     #[derive(Debug, Clone)]
@@ -83,6 +83,14 @@ pub mod tcap {
             }
         }
 
+        pub async fn create_capability(&self) -> Capability {
+            let c = Capability::create().await;
+
+            self.cap_table.insert(c.clone()).await;
+
+            c
+        }
+
         pub async fn run(&self) -> io::Result<()> {
             let s = self.clone();
             let sender_handle = tokio::spawn(async move {
@@ -139,7 +147,7 @@ pub mod tcap {
                                 None => {
                                     info!("stream {:?} is not waited for. Trying to parse unsolicited packet", stream_id);
 
-                                    s.parse(buf);
+                                    s.parse(buf).await;
                                 }
                             };
                         }
@@ -186,6 +194,7 @@ pub mod tcap {
                 CmdType::CapClose => todo!(),
                 CmdType::CapRevoke => {
                     let hdr = RevokeCapHeader::from(packet);
+                    debug!("Received CapRevoke: {:?}", hdr);
                     let _ = self.cap_table.remove(hdr.cap_id).await;
                 }
                 CmdType::RequestCreate => todo!(),
@@ -194,10 +203,13 @@ pub mod tcap {
                 CmdType::None => todo!(),
                 CmdType::InsertCap => {
                     let hdr = InsertCapHeader::from(packet);
+                    debug!("Received CapInsert: {:?}", hdr);
                     let _ = self.cap_table.insert(Capability::from(hdr)).await;
                 }
                 CmdType::CapDelegate => {
-                    todo!()
+                    let hdr = InsertCapHeader::from(packet);
+                    debug!("Received CapInsert: {:?}", hdr);
+                    let _ = self.cap_table.insert(Capability::from(hdr)).await;
                 }
             }
         }
