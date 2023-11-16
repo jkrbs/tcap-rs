@@ -6,8 +6,12 @@ pub mod tcap {
         fmt::format,
         net::{Ipv4Addr, SocketAddrV4},
         str::FromStr,
+        sync::Arc,
     };
-    use tokio::net::{unix::SocketAddr, ToSocketAddrs};
+    use tokio::{
+        net::{unix::SocketAddr, ToSocketAddrs},
+        sync::Mutex,
+    };
 
     #[repr(C)]
     #[derive(Clone, Copy, Pod, Zeroable, Debug)]
@@ -82,6 +86,22 @@ pub mod tcap {
         }
     }
 
+    impl IpAddress {
+        pub fn equals(&self, b: std::net::SocketAddr) -> bool {
+            if b.is_ipv6() {
+                return false;
+            }
+
+            let ip_b = IpAddress::from(b);
+
+            if ip_b.port == self.port && ip_b.address == self.address {
+                return true;
+            }
+
+            return false;
+        }
+    }
+
     impl From<IpAddress> for String {
         fn from(value: IpAddress) -> Self {
             format!(
@@ -101,11 +121,13 @@ pub mod tcap {
         /* Gap in OPCode Numbers Caused by Packet Types Unsupported by this implementation */
         CapClose = 5,
         CapRevoke = 6,
+        CapInvalid = 7,
         /* Gap in OPCode Numbers Caused by Packet Types Unsupported by this implementation */
         RequestCreate = 13,
         RequestInvoke = 14,
         /* Gap in OPCode Numbers Caused by Packet Types Unsupported by this implementation */
         RequestReceive = 16,
+        RequestResponse = 17,
         /* Gap in OPCode Numbers Caused by Packet Types Unsupported by this implementation */
         None = 32, // None is used as default value
 
@@ -123,9 +145,11 @@ pub mod tcap {
                 3 => CmdType::CapDiminish,
                 5 => CmdType::CapClose,
                 6 => CmdType::CapRevoke,
+                7 => CmdType::CapInvalid,
                 13 => CmdType::RequestCreate,
                 14 => CmdType::RequestInvoke,
                 16 => CmdType::RequestReceive,
+                17 => CmdType::RequestResponse,
                 32 => CmdType::None,
                 64 => CmdType::InsertCap,
                 65 => CmdType::CapDelegate,
@@ -137,10 +161,10 @@ pub mod tcap {
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct CommonHeader {
-        size: u32,
-        stream_id: u32,
+        size: u64,
+        pub(crate) stream_id: u32,
         cmd: u32,
-        cap_id: u64,
+        pub(crate) cap_id: u64,
     }
 
     #[repr(C, packed)]
@@ -177,6 +201,116 @@ pub mod tcap {
             let bytes: [u8; std::mem::size_of::<NOPRequestHeader>()] =
                 unsafe { std::mem::transmute_copy(&self) };
             Box::new(bytes)
+        }
+    }
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
+    pub struct RequestInvokeHeader {
+        pub common: CommonHeader,
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]>> for RequestInvokeHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<RequestInvokeHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+
+    impl RequestInvokeHeader {
+        pub(crate) fn construct(cap: Capability) -> RequestInvokeHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
+
+            RequestInvokeHeader {
+                common: CommonHeader {
+                    size: std::mem::size_of::<RequestInvokeHeader>()
+                        .try_into()
+                        .unwrap(),
+                    stream_id,
+                    cmd: CmdType::RequestInvoke as u32,
+                    cap_id: cap.cap_id,
+                },
+            }
+        }
+    }
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
+    pub(crate) struct CapInvalidHeader {
+        common: CommonHeader,
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<CapInvalidHeader>()]>> for CapInvalidHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<CapInvalidHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<CapInvalidHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+
+    impl From<Vec<u8>> for CapInvalidHeader {
+        fn from(value: Vec<u8>) -> Self {
+            *bytemuck::from_bytes(&value)
+        }
+    }
+
+    impl CapInvalidHeader {
+        pub fn construct(cap_id: u64, stream_id: u32) -> CapInvalidHeader {
+            CapInvalidHeader {
+                common: CommonHeader {
+                    size: 0,
+                    cmd: CmdType::CapInvalid as u32,
+                    stream_id,
+                    cap_id: cap_id,
+                },
+            }
+        }
+    }
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
+    pub(crate) struct RequestResponseHeader {
+        common: CommonHeader,
+        pub(crate) response_code: u64,
+    }
+
+    impl RequestResponseHeader {
+        pub(crate) async fn construct(
+            cap: Arc<Mutex<Capability>>,
+            stream_id: u32,
+            response_code: u64,
+        ) -> RequestResponseHeader {
+            RequestResponseHeader {
+                common: CommonHeader {
+                    size: 0,
+                    stream_id,
+                    cmd: CmdType::RequestResponse as u32,
+                    cap_id: cap.lock().await.cap_id,
+                },
+                response_code,
+            }
+        }
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<RequestResponseHeader>()]>> for RequestResponseHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<RequestResponseHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<RequestResponseHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+
+    impl From<Vec<u8>> for RequestResponseHeader {
+        fn from(value: Vec<u8>) -> Self {
+            assert!(
+                value.len() >= std::mem::size_of::<Self>(),
+                "Vector of len {:?} not large enough to unmarshal ResponseHeader req len {:?}",
+                value.len(),
+                std::mem::size_of::<Self>()
+            );
+            *bytemuck::from_bytes(&value)
         }
     }
 
@@ -228,6 +362,12 @@ pub mod tcap {
     }
 
     impl From<Vec<u8>> for RevokeCapHeader {
+        fn from(value: Vec<u8>) -> Self {
+            *bytemuck::from_bytes(&value)
+        }
+    }
+
+    impl From<Vec<u8>> for RequestInvokeHeader {
         fn from(value: Vec<u8>) -> Self {
             *bytemuck::from_bytes(&value)
         }
