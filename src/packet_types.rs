@@ -133,7 +133,6 @@ pub mod tcap {
 
         //nighP4 Implementation specific OP Codes
         InsertCap = 64,
-        CapDelegate = 65,
     }
 
     impl From<u32> for CmdType {
@@ -152,7 +151,6 @@ pub mod tcap {
                 17 => CmdType::RequestResponse,
                 32 => CmdType::None,
                 64 => CmdType::InsertCap,
-                65 => CmdType::CapDelegate,
                 _ => CmdType::None,
             }
         }
@@ -335,7 +333,7 @@ pub mod tcap {
             InsertCapHeader {
                 common: CommonHeader {
                     size: 0,
-                    cmd: CmdType::CapDelegate as u32,
+                    cmd: CmdType::InsertCap as u32,
                     stream_id,
                     cap_id: cap.cap_id,
                 },

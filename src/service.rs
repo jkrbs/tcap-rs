@@ -66,7 +66,10 @@ pub mod tcap {
         pub async fn new(config: Config) -> Service {
             let (send_channel, receiver) = mpsc::channel::<SendRequest>(256);
             info!("Binding UDP Socket to {:?}", config.address);
-            let socket = Arc::new(UdpSocket::bind(config.address.clone()).await.unwrap());
+            let socket = Arc::new(UdpSocket::bind(config.address.clone())
+                .await
+                .unwrap());
+            socket.bind_device(Some(config.interface.as_str().as_bytes())).unwrap();
 
             let send_channel = Arc::new(Mutex::new(send_channel));
             let receiver = Arc::new(Mutex::new(receiver));
@@ -258,14 +261,6 @@ pub mod tcap {
                 CmdType::RequestReceive => todo!(),
                 CmdType::None => todo!(),
                 CmdType::InsertCap => {
-                    let hdr = InsertCapHeader::from(packet);
-                    debug!("Received CapInsert: {:?}", hdr);
-                    let _ = self
-                        .cap_table
-                        .insert(Arc::new(Mutex::new(Capability::from(hdr))))
-                        .await;
-                }
-                CmdType::CapDelegate => {
                     let hdr = InsertCapHeader::from(packet);
                     debug!("Received CapInsert: {:?}", hdr);
                     let _ = self
