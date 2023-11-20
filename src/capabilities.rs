@@ -1,5 +1,5 @@
 pub mod tcap {
-    use std::sync::{Arc, Once};
+    use std::sync::Arc;
 
     use crate::{
         object::tcap::object::RequestObject,
