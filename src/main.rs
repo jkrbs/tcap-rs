@@ -56,14 +56,14 @@ async fn main() -> Result<(), ()> {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, thread};
+    use std::sync::Arc;
 
     use log::debug;
     use simple_logger::SimpleLogger;
-    use tokio::sync::{Mutex, Notify};
+    use tokio::sync::Mutex;
 
     use crate::{
-        capabilities::tcap::{CapType, Capability},
+        capabilities::tcap::CapType,
         object::tcap::object::RequestObject,
         packet_types::tcap::IpAddress,
         service::tcap::Service,

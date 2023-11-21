@@ -1,17 +1,12 @@
 pub mod tcap {
     use crate::capabilities::tcap::Capability;
     use bytemuck::*;
-    use log::debug;
     use std::{
-        fmt::format,
         net::{Ipv4Addr, SocketAddrV4},
         str::FromStr,
         sync::Arc,
     };
-    use tokio::{
-        net::{unix::SocketAddr, ToSocketAddrs},
-        sync::Mutex,
-    };
+    use tokio::sync::Mutex;
 
     #[repr(C)]
     #[derive(Clone, Copy, Pod, Zeroable, Debug)]
@@ -205,7 +200,7 @@ pub mod tcap {
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub struct RequestInvokeHeader {
-        pub common: CommonHeader,
+        pub(crate) common: CommonHeader,
     }
 
     impl Into<Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]>> for RequestInvokeHeader {
@@ -315,11 +310,11 @@ pub mod tcap {
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub struct InsertCapHeader {
-        pub common: CommonHeader,
-        pub cap_owner_ip: IpAddress,
-        pub cap_id: u64,
-        pub cap_type: u8,
-        pub object_owner: IpAddress,
+        pub(crate) common: CommonHeader,
+        pub(crate) cap_owner_ip: IpAddress,
+        pub(crate) cap_id: u64,
+        pub(crate) cap_type: u8,
+        pub(crate) object_owner: IpAddress,
     }
 
     impl InsertCapHeader {

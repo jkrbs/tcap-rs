@@ -1,16 +1,15 @@
 pub mod tcap {
     use std::collections::HashMap;
     use std::sync::Arc;
-    use std::{io, usize};
+    use std::io;
 
     use crate::cap_table::tcap::cap_table::CapTable;
     use crate::capabilities::tcap::Capability;
-    use crate::object::tcap::object::RequestObject;
     use crate::packet_types::tcap::{
         CapInvalidHeader, CmdType, CommonHeader, InsertCapHeader, IpAddress, RequestInvokeHeader,
         RequestResponseHeader, RevokeCapHeader,
     };
-    use crate::{cap_table, Config};
+    use crate::Config;
     use log::{debug, info};
     use tokio::net::UdpSocket;
     use tokio::sync::{mpsc, Mutex, Notify};
@@ -19,7 +18,7 @@ pub mod tcap {
     pub struct Service {
         send_channel: Arc<Mutex<mpsc::Sender<SendRequest>>>,
         receiver: Arc<Mutex<mpsc::Receiver<SendRequest>>>,
-        pub config: Config,
+        pub(crate) config: Config,
         socket: Arc<UdpSocket>,
         responses: Arc<Mutex<HashMap<u32, Response>>>,
         response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>,
@@ -63,7 +62,7 @@ pub mod tcap {
     }
 
     impl Service {
-        pub async fn new(config: Config) -> Service {
+        pub(crate) async fn new(config: Config) -> Service {
             let (send_channel, receiver) = mpsc::channel::<SendRequest>(256);
             info!("Binding UDP Socket to {:?}", config.address);
             let socket = Arc::new(UdpSocket::bind(config.address.clone())
