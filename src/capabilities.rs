@@ -75,6 +75,16 @@ pub mod tcap {
             }
         }
 
+        pub(crate) async fn create_with_id(owner_address: IpAddress, cap_id: u64) -> Capability {
+            Capability {
+                cap_id,
+                cap_type: CapType::None,
+                owner_address,
+                delegatees: Arc::new(Mutex::new(Vec::new())),
+                object: None,
+            }
+        }
+
         pub(crate) async fn bind(&mut self, obj: Arc<Mutex<RequestObject>>) {
             self.object = Some(obj);
             self.object

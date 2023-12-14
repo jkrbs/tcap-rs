@@ -99,6 +99,20 @@ pub mod tcap {
             c
         }
 
+        /*** This function create a capability with a predefined cap id
+         * It is a work around, as there is no global name service or authentication broker
+         * TODO (@jkrbs): Build name service or initial cap distribution system
+         */
+        pub async fn create_capability_with_id(&self, cap_id: u64) -> Arc<Mutex<Capability>> {
+            let c = Arc::new(Mutex::new(
+                Capability::create_with_id(self.config.address.as_str().into(), cap_id).await,
+            ));
+
+            self.cap_table.insert(c.clone()).await;
+
+            c
+        }
+
         pub async fn run(&self) -> io::Result<()> {
             let s = self.clone();
             let sender_handle = tokio::spawn(async move {
