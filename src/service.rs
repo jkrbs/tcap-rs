@@ -9,7 +9,7 @@ pub mod tcap {
         CapInvalidHeader, CmdType, CommonHeader, InsertCapHeader, IpAddress, RequestInvokeHeader,
         RequestResponseHeader, RevokeCapHeader,
     };
-    use crate::Config;
+    use crate::config::Config;
     use log::{debug, info};
     use tokio::net::UdpSocket;
     use tokio::sync::{mpsc, Mutex, Notify};
@@ -62,7 +62,7 @@ pub mod tcap {
     }
 
     impl Service {
-        pub(crate) async fn new(config: Config) -> Service {
+        pub async fn new(config: Config) -> Service {
             let (send_channel, receiver) = mpsc::channel::<SendRequest>(256);
             info!("Binding UDP Socket to {:?}", config.address);
             let socket = Arc::new(UdpSocket::bind(config.address.clone())
@@ -248,10 +248,16 @@ pub mod tcap {
                     }
 
                     let cap = self.cap_table.get(hdr.common.cap_id).await.unwrap();
+                    let continuation = match hdr.continutaion_cap_id {
+                        0 => None,
+                        // TODO (@jkrbs): do not require a previous delegation for the invocation
+                        s => Some(self.cap_table.get(s).await.unwrap())
+                    };
+
                     let packet: Box<[u8; std::mem::size_of::<RequestResponseHeader>()]> = match cap
                         .lock()
                         .await
-                        .run(self.clone())
+                        .run(continuation, self.clone())
                         .await
                     {
                         Ok(_) => {

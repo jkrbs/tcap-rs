@@ -63,7 +63,7 @@ pub mod tcap {
     }
 
     impl Capability {
-        pub async fn create(owner_address: IpAddress) -> Capability {
+        pub(crate) async fn create(owner_address: IpAddress) -> Capability {
             let mut rng = rand::thread_rng();
             let cap_id = rng.gen::<u64>();
             Capability {
@@ -93,6 +93,7 @@ pub mod tcap {
                 .lock()
                 .await
                 .set_cap(self.clone());
+            // TODO set correct cap type
             info!("Binding obj {:?} to cap {:?}", self.object, self.cap_id);
         }
 
@@ -145,9 +146,9 @@ pub mod tcap {
             Ok(())
         }
 
-        pub(crate) async fn run(&self, s: Service) -> Result<(), ()> {
+        pub(crate) async fn run(&self, continuation: Option<Arc<Mutex<Capability>>>, s: Service) -> Result<(), ()> {
             match self.object.as_ref() {
-                Some(o) => o.lock().await.invoke(s).await,
+                Some(o) => o.lock().await.invoke(s, continuation).await,
                 None => {
                     error!(
                         "Cap {:?} has no Request object bound and cannot be run!",

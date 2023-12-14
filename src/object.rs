@@ -5,6 +5,8 @@ pub mod tcap {
 
         use log::{debug, info};
         use tokio::sync::mpsc;
+        use tokio::sync::Mutex;
+        use std::sync::Arc;
 
         //TODO (@jkrbs): Refactor into Object Trait and multiple object types for Memory and Requests at least
         use crate::{capabilities::tcap::Capability, service::tcap::Service};
@@ -12,7 +14,7 @@ pub mod tcap {
         pub(crate) struct RequestObject {
             is_local: bool,
             pub(crate) cap: Option<Capability>,
-            function: Box<dyn Fn() -> Result<(), ()> + Send + Sync>,
+            function: Box<dyn Fn(Option<Arc<Mutex<Capability>>>) -> Result<(), ()> + Send + Sync>,
         }
 
         impl fmt::Debug for RequestObject {
@@ -26,7 +28,7 @@ pub mod tcap {
 
         impl RequestObject {
             pub async fn new(
-                function: Box<dyn Fn() -> Result<(), ()> + Send + Sync>,
+                function: Box<dyn Fn(Option<Arc<Mutex<Capability>>>) -> Result<(), ()> + Send + Sync>,
             ) -> RequestObject {
                 RequestObject {
                     is_local: true,
@@ -43,11 +45,11 @@ pub mod tcap {
                 self.cap = Some(c);
             }
 
-            pub async fn invoke(&self, s: Service) -> Result<(), ()> {
+            pub async fn invoke(&self, s: Service, continuation: Option<Arc<Mutex<Capability>>>) -> Result<(), ()> {
                 debug!("invoking Request Object");
                 if self.is_local {
                     info!("Calling RequestObject Function");
-                    return self.function.as_ref()();
+                    return self.function.as_ref()(continuation);
                 } else {
                     return self.cap.as_ref().unwrap().request_invoke(s).await;
                 }

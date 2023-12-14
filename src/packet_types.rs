@@ -201,6 +201,7 @@ pub mod tcap {
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub struct RequestInvokeHeader {
         pub(crate) common: CommonHeader,
+        pub(crate) continutaion_cap_id: u64   
     }
 
     impl Into<Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]>> for RequestInvokeHeader {
@@ -223,8 +224,9 @@ pub mod tcap {
                         .unwrap(),
                     stream_id,
                     cmd: CmdType::RequestInvoke as u32,
-                    cap_id: cap.cap_id,
+                    cap_id: cap.cap_id
                 },
+                continutaion_cap_id: 0
             }
         }
     }
