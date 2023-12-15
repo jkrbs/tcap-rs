@@ -23,6 +23,7 @@ pub mod tcap {
         responses: Arc<Mutex<HashMap<u32, Response>>>,
         response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>,
         pub(crate) cap_table: CapTable,
+        termination_notifier: Arc<Notify>
     }
 
     #[derive(Debug, Clone)]
@@ -30,7 +31,7 @@ pub mod tcap {
         pub dest: String,
         pub data: Box<[u8]>,
         pub stream_id: u32,
-        response_notification: Arc<Notify>,
+        response_notification: Arc<Notify>
     }
 
     impl SendRequest {
@@ -77,7 +78,8 @@ pub mod tcap {
             let response_notifiers = Arc::new(Mutex::new(HashMap::new()));
 
             let cap_table = CapTable::new().await;
-
+            
+            let termination_notifier = Arc::new(Notify::new());
             Service {
                 send_channel,
                 receiver,
@@ -86,12 +88,13 @@ pub mod tcap {
                 responses,
                 response_notifiers,
                 cap_table,
+                termination_notifier,
             }
         }
 
         pub async fn create_capability(&self) -> Arc<Mutex<Capability>> {
             let c = Arc::new(Mutex::new(
-                Capability::create(self.config.address.as_str().into()).await,
+                Capability::create(Arc::new(Mutex::new(self.clone()))).await,
             ));
 
             self.cap_table.insert(c.clone()).await;
@@ -105,12 +108,33 @@ pub mod tcap {
          */
         pub async fn create_capability_with_id(&self, cap_id: u64) -> Arc<Mutex<Capability>> {
             let c = Arc::new(Mutex::new(
-                Capability::create_with_id(self.config.address.as_str().into(), cap_id).await,
+                Capability::create_with_id(Arc::new(Mutex::new(self.clone())), cap_id).await,
             ));
 
             self.cap_table.insert(c.clone()).await;
 
             c
+        }
+
+        pub async fn create_remote_capability_with_id(&self, owner: String, cap_id: u64) -> Arc<Mutex<Capability>> {
+            let owner_address = IpAddress::from(owner.as_str());
+            let c = Arc::new(Mutex::new(
+                Capability::create_remote_with_id(Arc::new(Mutex::new(self.clone())), owner_address, cap_id).await,
+            ));
+
+            self.cap_table.insert(c.clone()).await;
+
+            c
+        }
+
+        pub async fn terminate(&self) {
+            for cap_id in self.cap_table.get_capids().await {
+                let cap =  self.cap_table.get(cap_id).await;
+                if let Some(cap) = cap {
+                    cap.lock().await.revoke(self.clone()).await.unwrap();
+                }
+            }
+            self.termination_notifier.clone().notify_waiters();
         }
 
         pub async fn run(&self) -> io::Result<()> {
@@ -182,7 +206,7 @@ pub mod tcap {
                                 None => {
                                     info!("stream {:?} is not waited for. Trying to parse unsolicited packet", stream_id);
 
-                                    s.parse(buf).await;
+                                    s.parse(sender.to_string(), buf).await;
                                 }
                             };
                         }
@@ -192,9 +216,11 @@ pub mod tcap {
                     };
                 }
             });
+            
+            self.termination_notifier.clone().notified().await;
+            let  _ = sender_handle.abort();
+            let  _ = receiver_handle.abort();
 
-            let _ = sender_handle.await;
-            let _ = receiver_handle.await;
             Ok(())
         }
 
@@ -215,7 +241,7 @@ pub mod tcap {
             None
         }
 
-        async fn parse(&self, packet: Vec<u8>) {
+        async fn parse(&self, source: String, packet: Vec<u8>) {
             assert!(
                 packet.len() >= std::mem::size_of::<CommonHeader>(),
                 "Received packets must include the common header"
@@ -253,41 +279,50 @@ pub mod tcap {
                         // TODO (@jkrbs): do not require a previous delegation for the invocation
                         s => Some(self.cap_table.get(s).await.unwrap())
                     };
-
+                    let capid = cap.lock().await.cap_id;
                     let packet: Box<[u8; std::mem::size_of::<RequestResponseHeader>()]> = match cap
                         .lock()
                         .await
-                        .run(continuation, self.clone())
+                        .run(continuation)
                         .await
                     {
                         Ok(_) => {
-                            RequestResponseHeader::construct(cap.clone(), hdr.common.stream_id, 0)
+                            debug!("result ok: constructing reponse header with code 0");
+                            RequestResponseHeader::construct(capid, hdr.common.stream_id, 0)
                                 .await
                                 .into()
                         }
                         Err(_) => {
-                            RequestResponseHeader::construct(cap.clone(), hdr.common.stream_id, 100)
+                            debug!("result ok: constructing reponse header with code 100");
+                            RequestResponseHeader::construct(capid, hdr.common.stream_id, 100)
                                 .await
                                 .into()
                         }
                     };
-
+                    debug!("Sent Response packet {:?} to {:?}", packet, source);
                     let _ = self
-                        .send(SendRequest::new("".to_string(), packet), false)
-                        .await
-                        .unwrap();
+                        .send(SendRequest::new(source, packet), false)
+                        .await;
                 }
                 CmdType::RequestReceive => todo!(),
                 CmdType::None => todo!(),
                 CmdType::InsertCap => {
                     let hdr = InsertCapHeader::from(packet);
                     debug!("Received CapInsert: {:?}", hdr);
-                    let _ = self
+                    let cap = Arc::new(Mutex::new(Capability::from(hdr)));
+                    cap.lock().await.service = Some(Arc::new(Mutex::new(self.clone())));
+                    let _ = self    
                         .cap_table
-                        .insert(Arc::new(Mutex::new(Capability::from(hdr))))
+                        .insert(cap)
                         .await;
                 }
-                CmdType::RequestResponse => todo!(),
+                CmdType::RequestResponse => {
+                    debug!("Received Request Response");
+                    let hdr = RequestResponseHeader::from(packet.clone());
+                    let streamid = hdr.common.stream_id;
+                    self.responses.lock().await.insert(streamid, Response { sender: "".to_string(), data: packet });
+                    self.response_notifiers.lock().await.get(&streamid).unwrap().notify_waiters();
+                },
             };
         }
     }

@@ -213,7 +213,7 @@ pub mod tcap {
     }
 
     impl RequestInvokeHeader {
-        pub(crate) fn construct(cap: Capability) -> RequestInvokeHeader {
+        pub(crate) fn construct(cap: Capability, continutaion_cap_id: u64) -> RequestInvokeHeader {
             let mut rng = rand::thread_rng();
             let stream_id = rand::Rng::gen::<u32>(&mut rng);
 
@@ -226,7 +226,7 @@ pub mod tcap {
                     cmd: CmdType::RequestInvoke as u32,
                     cap_id: cap.cap_id
                 },
-                continutaion_cap_id: 0
+                continutaion_cap_id
             }
         }
     }
@@ -267,13 +267,13 @@ pub mod tcap {
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct RequestResponseHeader {
-        common: CommonHeader,
+        pub(crate) common: CommonHeader,
         pub(crate) response_code: u64,
     }
 
     impl RequestResponseHeader {
         pub(crate) async fn construct(
-            cap: Arc<Mutex<Capability>>,
+            cap_id: u64,
             stream_id: u32,
             response_code: u64,
         ) -> RequestResponseHeader {
@@ -282,7 +282,7 @@ pub mod tcap {
                     size: 0,
                     stream_id,
                     cmd: CmdType::RequestResponse as u32,
-                    cap_id: cap.lock().await.cap_id,
+                    cap_id,
                 },
                 response_code,
             }
