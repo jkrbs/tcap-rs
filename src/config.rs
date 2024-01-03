@@ -15,13 +15,3 @@ pub struct Config {
     #[arg(short, long)]
     pub switch_addr: String,
 }
-
-impl Config {
-    fn clone(&self) -> Self {
-        Self {
-            interface: self.interface.clone(),
-            address: self.address.clone(),
-            switch_addr: self.switch_addr.clone(),
-        }
-    }
-}

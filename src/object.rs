@@ -1,15 +1,12 @@
 pub mod tcap {
     pub mod object {
         use core::fmt;
-        use std::collections::HashMap;
-
-        use log::{debug, info};
-        use tokio::sync::mpsc;
+        use log::debug;
         use tokio::sync::Mutex;
         use std::sync::Arc;
 
         //TODO (@jkrbs): Refactor into Object Trait and multiple object types for Memory and Requests at least
-        use crate::{capabilities::tcap::Capability, service::tcap::Service};
+        use crate::capabilities::tcap::Capability;
 
         pub struct RequestObject {
             is_local: bool,
@@ -54,15 +51,6 @@ pub mod tcap {
                     return self.cap.as_ref().unwrap().request_invoke().await;
                 }
             }
-        }
-
-        struct ObjectTable {
-            objects: HashMap<u64, RequestObject>,
-            pipeline: mpsc::Receiver<u64>,
-        }
-
-        impl ObjectTable {
-            pub(crate) async fn run(&self) {}
         }
     }
 }

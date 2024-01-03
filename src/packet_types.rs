@@ -3,10 +3,8 @@ pub mod tcap {
     use bytemuck::*;
     use std::{
         net::{Ipv4Addr, SocketAddrV4},
-        str::FromStr,
-        sync::Arc,
+        str::FromStr
     };
-    use tokio::sync::Mutex;
 
     #[repr(C)]
     #[derive(Clone, Copy, Pod, Zeroable, Debug)]
@@ -24,9 +22,9 @@ pub mod tcap {
 
     impl From<&str> for IpAddress {
         fn from(val: &str) -> Self {
-            let mut netmask: Option<Ipv4Addr> = None;
-            let mut address: Option<Ipv4Addr> = None;
-            let mut port: Option<u16> = None;
+            let netmask: Option<Ipv4Addr>;
+            let address: Option<Ipv4Addr>;
+            let port: Option<u16>;
 
             if val.contains(':') {
                 //port provided
@@ -174,7 +172,7 @@ pub mod tcap {
     }
 
     impl NOPRequestHeader {
-        pub fn construct(cap: Capability, info: u64) -> NOPRequestHeader {
+        pub fn _construct(cap: Capability, info: u64) -> NOPRequestHeader {
             let mut rng = rand::thread_rng();
             let stream_id = rand::Rng::gen::<u32>(&mut rng);
             NOPRequestHeader {
@@ -403,8 +401,6 @@ pub mod tcap {
     }
 
     mod tests {
-        use super::IpAddress;
-
         #[test]
         fn test_create_ip_addr_object_from_string() {
             let obj = IpAddress::from("10.0.0.1:1234");
