@@ -113,7 +113,7 @@ pub mod tcap {
                 .await
                 .set_cap(self.clone());
             // TODO set correct cap type
-            info!("Binding obj {:?} to cap {:?}", self.object, self.cap_id);
+            debug!("Binding obj {:?} to cap {:?}", self.object, self.cap_id);
         }
 
         pub async fn delegate(

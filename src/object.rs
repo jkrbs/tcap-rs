@@ -48,7 +48,7 @@ pub mod tcap {
             pub async fn invoke(&self, continuation: Option<Arc<Mutex<Capability>>>) -> Result<(), ()> {
                 debug!("invoking Request Object");
                 if self.is_local {
-                    info!("Calling RequestObject Function");
+                    debug!("Calling RequestObject Function");
                     return self.function.as_ref()(continuation);
                 } else {
                     return self.cap.as_ref().unwrap().request_invoke().await;

@@ -65,7 +65,7 @@ pub mod tcap {
     impl Service {
         pub async fn new(config: Config) -> Service {
             let (send_channel, receiver) = mpsc::channel::<SendRequest>(256);
-            info!("Binding UDP Socket to {:?}", config.address);
+            debug!("Binding UDP Socket to {:?}", config.address);
             let socket = Arc::new(UdpSocket::bind(config.address.clone())
                 .await
                 .unwrap());
@@ -204,7 +204,7 @@ pub mod tcap {
                                     debug!("notified stream id {:?}", stream_id);
                                 }
                                 None => {
-                                    info!("stream {:?} is not waited for. Trying to parse unsolicited packet", stream_id);
+                                    debug!("stream {:?} is not waited for. Trying to parse unsolicited packet", stream_id);
 
                                     s.parse(sender.to_string(), buf).await;
                                 }
