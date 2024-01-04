@@ -92,6 +92,10 @@ pub mod tcap {
             }
         }
 
+        pub fn get_compilation_commit() -> String {
+            env!("GIT_HASH").to_string()
+        }
+
         pub async fn create_capability(&self) -> Arc<Mutex<Capability>> {
             let c = Arc::new(Mutex::new(
                 Capability::create(Arc::new(Mutex::new(self.clone()))).await,
