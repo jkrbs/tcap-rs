@@ -126,6 +126,11 @@ pub mod tcap {
 
         //nighP4 Implementation specific OP Codes
         InsertCap = 64,
+
+        ControllerResetSwitch = 128,
+        ControllerStop = 129,
+        ControllerStartTimer = 130,
+        ControllerStopTimer = 131
     }
 
     impl From<u32> for CmdType {
@@ -144,6 +149,11 @@ pub mod tcap {
                 17 => CmdType::RequestResponse,
                 32 => CmdType::None,
                 64 => CmdType::InsertCap,
+
+                128 => CmdType::ControllerResetSwitch,
+                129 => CmdType::ControllerStop,
+                130 => CmdType::ControllerStartTimer,
+                131 => CmdType::ControllerStopTimer,
                 _ => CmdType::None,
             }
         }
@@ -397,6 +407,114 @@ pub mod tcap {
             let bytes: [u8; std::mem::size_of::<RevokeCapHeader>()] =
                 unsafe { std::mem::transmute_copy(&self) };
             Box::new(bytes)
+        }
+    }
+
+    pub(crate) struct ControllerStartTimerHeader {
+        pub(crate) common: CommonHeader
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<ControllerStartTimerHeader>()]>> for ControllerStartTimerHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<ControllerStartTimerHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<ControllerStartTimerHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+
+    impl ControllerStartTimerHeader {
+        pub fn construct() -> ControllerStartTimerHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
+
+            ControllerStartTimerHeader {
+                common: CommonHeader {
+                    size: 0,
+                    cmd: CmdType::ControllerStartTimer as u32,
+                    stream_id,
+                    cap_id: 0,
+                }
+            }
+        }
+    }
+    pub(crate) struct ControllerStopTimerHeader {
+        pub(crate) common: CommonHeader
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<ControllerStopTimerHeader>()]>> for ControllerStopTimerHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<ControllerStopTimerHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<ControllerStopTimerHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+
+    impl ControllerStopTimerHeader {
+        pub fn construct() -> ControllerStopTimerHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
+
+            ControllerStopTimerHeader {
+                common: CommonHeader {
+                    size: 0,
+                    cmd: CmdType::ControllerStopTimer as u32,
+                    stream_id,
+                    cap_id: 0,
+                }
+            }
+        }
+    }
+
+    pub(crate) struct ControllerResetSwitchHeader {
+        pub(crate) common: CommonHeader
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<ControllerResetSwitchHeader>()]>> for ControllerResetSwitchHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<ControllerResetSwitchHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<ControllerResetSwitchHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+    impl ControllerResetSwitchHeader {
+        pub fn construct() -> ControllerResetSwitchHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
+
+            ControllerResetSwitchHeader {
+                common: CommonHeader {
+                    size: 0,
+                    cmd: CmdType::ControllerResetSwitch as u32,
+                    stream_id,
+                    cap_id: 0,
+                }
+            }
+        }
+    }
+    pub(crate) struct ControllerStopHeader {
+        pub(crate) common: CommonHeader
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<ControllerStopHeader>()]>> for ControllerStopHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<ControllerStopHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<ControllerStopHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+    impl ControllerStopHeader {
+        pub fn construct() -> ControllerStopHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
+
+            ControllerStopHeader {
+                common: CommonHeader {
+                    size: 0,
+                    cmd: CmdType::ControllerStop as u32,
+                    stream_id,
+                    cap_id: 0,
+                }
+            }
         }
     }
 

@@ -5,12 +5,9 @@ pub mod tcap {
 
     use crate::cap_table::tcap::cap_table::CapTable;
     use crate::capabilities::tcap::Capability;
-    use crate::packet_types::tcap::{
-        CapInvalidHeader, CmdType, CommonHeader, InsertCapHeader, IpAddress, RequestInvokeHeader,
-        RequestResponseHeader, RevokeCapHeader,
-    };
+    use crate::packet_types::tcap::*;
     use crate::config::Config;
-    use log::{debug, info};
+    use log::{debug, info, warn};
     use tokio::net::UdpSocket;
     use tokio::sync::{mpsc, Mutex, Notify};
 
@@ -327,7 +324,38 @@ pub mod tcap {
                     self.responses.lock().await.insert(streamid, Response { sender: "".to_string(), data: packet });
                     self.response_notifiers.lock().await.get(&streamid).unwrap().notify_waiters();
                 },
+                _ => {
+                    warn!("Unrecognized CMDType received");
+                }
             };
+        }
+    
+        pub async fn controller_timer_start(&self) {
+            let data:Box<[u8; std::mem::size_of::<ControllerStartTimerHeader>()]> = ControllerStartTimerHeader::construct().into();
+            let req = SendRequest::new(self.config.switch_addr.clone(), data);
+            
+            self.send(req, false).await;
+        }
+
+        pub async fn controller_timer_stop(&self) {
+            let data:Box<[u8; std::mem::size_of::<ControllerStopTimerHeader>()]> = ControllerStopTimerHeader::construct().into();
+            let req = SendRequest::new(self.config.switch_addr.clone(), data);
+            
+            self.send(req, false).await;
+        }
+
+        pub async fn controller_reset_switch(&self) {
+            let data:Box<[u8; std::mem::size_of::<ControllerResetSwitchHeader>()]> = ControllerResetSwitchHeader::construct().into();
+            let req = SendRequest::new(self.config.switch_addr.clone(), data);
+            
+            self.send(req, false).await;
+        }
+
+        pub async fn controller_stop(&self) {
+            let data:Box<[u8; std::mem::size_of::<ControllerStopHeader>()]> = ControllerStopHeader::construct().into();
+            let req = SendRequest::new(self.config.switch_addr.clone(), data);
+            
+            self.send(req, false).await;
         }
     }
 }
