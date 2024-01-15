@@ -1,9 +1,10 @@
 pub mod tcap {
-    use crate::capabilities::tcap::Capability;
+    use crate::{capabilities::tcap::Capability, object::tcap::object::MemoryObject};
     use bytemuck::*;
+    use tokio::sync::Mutex;
     use std::{
         net::{Ipv4Addr, SocketAddrV4},
-        str::FromStr
+        str::FromStr, sync::Arc
     };
 
     #[repr(C)]
@@ -116,6 +117,9 @@ pub mod tcap {
         CapRevoke = 6,
         CapInvalid = 7,
         /* Gap in OPCode Numbers Caused by Packet Types Unsupported by this implementation */
+        MemoryCopy = 10,
+        MemoryCopyResponse = 11,
+        /* Gap in OPCode Numbers Caused by Packet Types Unsupported by this implementation */
         RequestCreate = 13,
         RequestInvoke = 14,
         /* Gap in OPCode Numbers Caused by Packet Types Unsupported by this implementation */
@@ -143,6 +147,8 @@ pub mod tcap {
                 5 => CmdType::CapClose,
                 6 => CmdType::CapRevoke,
                 7 => CmdType::CapInvalid,
+                10 => CmdType::MemoryCopy,
+                11 => CmdType::MemoryCopyResponse,
                 13 => CmdType::RequestCreate,
                 14 => CmdType::RequestInvoke,
                 16 => CmdType::RequestReceive,
@@ -410,6 +416,8 @@ pub mod tcap {
         }
     }
 
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct ControllerStartTimerHeader {
         pub(crate) common: CommonHeader
     }
@@ -437,6 +445,9 @@ pub mod tcap {
             }
         }
     }
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct ControllerStopTimerHeader {
         pub(crate) common: CommonHeader
     }
@@ -465,6 +476,8 @@ pub mod tcap {
         }
     }
 
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct ControllerResetSwitchHeader {
         pub(crate) common: CommonHeader
     }
@@ -491,8 +504,17 @@ pub mod tcap {
             }
         }
     }
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct ControllerStopHeader {
         pub(crate) common: CommonHeader
+    }
+
+    impl From<Vec<u8>> for ControllerStopHeader {
+        fn from(value: Vec<u8>) -> Self {
+            *bytemuck::from_bytes(&value)
+        }
     }
 
     impl Into<Box<[u8; std::mem::size_of::<ControllerStopHeader>()]>> for ControllerStopHeader {
@@ -514,6 +536,86 @@ pub mod tcap {
                     stream_id,
                     cap_id: 0,
                 }
+            }
+        }
+    }
+
+    // Memory Copy
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
+    pub(crate) struct MemoryCopyRequestHeader {
+        pub(crate) common: CommonHeader
+    }
+
+
+    impl From<Vec<u8>> for MemoryCopyRequestHeader {
+        fn from(value: Vec<u8>) -> Self {
+            *bytemuck::from_bytes(&value)
+        }
+    }
+
+    
+    impl Into<Box<[u8; std::mem::size_of::<MemoryCopyRequestHeader>()]>> for MemoryCopyRequestHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<MemoryCopyRequestHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<MemoryCopyRequestHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+    impl MemoryCopyRequestHeader {
+        pub fn construct(cap_id: u64) -> MemoryCopyRequestHeader {
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
+
+            MemoryCopyRequestHeader {
+                common: CommonHeader {
+                    size: 0,
+                    cmd: CmdType::MemoryCopy as u32,
+                    stream_id,
+                    cap_id: cap_id,
+                }
+            }
+        }
+    }
+
+    #[repr(C, packed)]
+    #[derive(Copy, Clone, Pod, Zeroable, Debug)]
+    pub(crate) struct MemoryCopyResponseHeader {
+        pub(crate) common: CommonHeader,
+        pub(crate) size: u64,
+        pub(crate) buffer: [u8;1024]
+    }
+
+    impl From<Vec<u8>> for MemoryCopyResponseHeader {
+        fn from(value: Vec<u8>) -> Self {
+            *bytemuck::from_bytes(&value)
+        }
+    }
+
+    impl Into<Box<[u8; std::mem::size_of::<MemoryCopyResponseHeader>()]>> for MemoryCopyResponseHeader {
+        fn into(self) -> Box<[u8; std::mem::size_of::<MemoryCopyResponseHeader>()]> {
+            let bytes: [u8; std::mem::size_of::<MemoryCopyResponseHeader>()] =
+                unsafe { std::mem::transmute_copy(&self) };
+            Box::new(bytes)
+        }
+    }
+    impl MemoryCopyResponseHeader {
+        pub(crate) async fn construct(obj: Arc<Mutex<MemoryObject>>) -> MemoryCopyResponseHeader {
+            let size = obj.lock().await.size.clone();
+            let buffer = obj.lock().await.data.clone();
+
+            let mut rng = rand::thread_rng();
+            let stream_id = rand::Rng::gen::<u32>(&mut rng);
+
+            MemoryCopyResponseHeader {
+                common: CommonHeader {
+                    size: 0,
+                    cmd: CmdType::MemoryCopyResponse as u32,
+                    stream_id,
+                    cap_id: 0,
+                },
+               size, buffer
             }
         }
     }

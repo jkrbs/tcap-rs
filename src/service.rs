@@ -4,7 +4,7 @@ pub mod tcap {
     use std::io;
 
     use crate::cap_table::tcap::cap_table::CapTable;
-    use crate::capabilities::tcap::Capability;
+    use crate::capabilities::tcap::{Capability, CapType};
     use crate::packet_types::tcap::*;
     use crate::config::Config;
     use log::{debug, info, warn};
@@ -270,8 +270,9 @@ pub mod tcap {
                             CapInvalidHeader::construct(hdr.common.cap_id, hdr.common.stream_id)
                                 .into();
 
-                        self.send(SendRequest::new("".to_string(), packet), false)
+                        self.send(SendRequest::new(source, packet), false)
                             .await;
+                        return;
                     }
 
                     let cap = self.cap_table.get(hdr.common.cap_id).await.unwrap();
@@ -320,6 +321,37 @@ pub mod tcap {
                 CmdType::RequestResponse => {
                     debug!("Received Request Response");
                     let hdr = RequestResponseHeader::from(packet.clone());
+                    let streamid = hdr.common.stream_id;
+                    self.responses.lock().await.insert(streamid, Response { sender: "".to_string(), data: packet });
+                    self.response_notifiers.lock().await.get(&streamid).unwrap().notify_waiters();
+                },
+                CmdType::MemoryCopy => {
+                    let hdr = MemoryCopyRequestHeader::from(packet.clone());
+                    if !self.cap_table.contains(hdr.common.cap_id).await {
+                        let packet: Box<[u8; std::mem::size_of::<CapInvalidHeader>()]> =
+                            CapInvalidHeader::construct(hdr.common.cap_id, hdr.common.stream_id)
+                                .into();
+
+                        self.send(SendRequest::new(source, packet), false)
+                            .await;
+                        return;
+                    }
+
+                    let cap = self.cap_table.get(hdr.common.cap_id).await.unwrap();
+
+                    if cap.lock().await.cap_type != CapType::Memory {
+                        panic!("someone ties to capy memory from a non-memory type capability");
+                    }
+
+                    let resp: Box<[u8; std::mem::size_of::<MemoryCopyResponseHeader>()]> = MemoryCopyResponseHeader::construct(cap.lock().await.get_buffer().await).await.into();
+
+                    debug!("Sent Response packet {:?} to {:?}", packet, source);
+                    let _ = self
+                        .send(SendRequest::new(source, resp), false)
+                        .await;
+                },
+                CmdType::MemoryCopyResponse => {
+                    let hdr = MemoryCopyRequestHeader::from(packet.clone());
                     let streamid = hdr.common.stream_id;
                     self.responses.lock().await.insert(streamid, Response { sender: "".to_string(), data: packet });
                     self.response_notifiers.lock().await.get(&streamid).unwrap().notify_waiters();

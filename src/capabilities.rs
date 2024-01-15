@@ -2,9 +2,9 @@ pub mod tcap {
     use std::sync::Arc;
 
     use crate::{
-        object::tcap::object::RequestObject,
+        object::tcap::object::{RequestObject, MemoryObject},
         packet_types::tcap::{
-            InsertCapHeader, IpAddress, RequestInvokeHeader, RequestResponseHeader, RevokeCapHeader,
+            InsertCapHeader, IpAddress, RequestInvokeHeader, RequestResponseHeader, RevokeCapHeader, MemoryCopyRequestHeader, MemoryCopyResponseHeader,
         },
         service::tcap::{SendRequest, Service},
     };
@@ -13,7 +13,7 @@ pub mod tcap {
     use tokio::sync::Mutex;
 
     #[repr(u8)]
-    #[derive(Clone, Copy, Debug)]
+    #[derive(Clone, Copy, Debug, PartialEq)]
     pub enum CapType {
         None = 0,
         Request = 1,
@@ -47,7 +47,8 @@ pub mod tcap {
         pub cap_type: CapType,
         owner_address: IpAddress,
         delegatees: Arc<Mutex<Vec<IpAddress>>>,
-        object: Option<Arc<Mutex<RequestObject>>>,
+        request_object: Option<Arc<Mutex<RequestObject>>>,
+        memory_object: Option<Arc<Mutex<MemoryObject>>>,
         pub service: Option<Arc<Mutex<Service>>>
     }
 
@@ -58,7 +59,8 @@ pub mod tcap {
                 cap_type: CapType::from(value.cap_type),
                 owner_address: value.object_owner,
                 delegatees: Arc::new(Mutex::new(Vec::new())),
-                object: None,
+                request_object: None,
+                memory_object: None,
                 service: None
             }
         }
@@ -76,7 +78,8 @@ pub mod tcap {
                 cap_type: CapType::None,
                 owner_address,
                 delegatees: Arc::new(Mutex::new(Vec::new())),
-                object: None,
+                request_object: None,
+                memory_object: None,
                 service: Some(s)
             }
         }
@@ -88,7 +91,8 @@ pub mod tcap {
                 cap_type: CapType::None,
                 owner_address,
                 delegatees: Arc::new(Mutex::new(Vec::new())),
-                object: None,
+                request_object: None,
+                memory_object: None,
                 service: Some(s)
             }
         }
@@ -99,21 +103,22 @@ pub mod tcap {
                 cap_type: CapType::None,
                 owner_address,
                 delegatees: Arc::new(Mutex::new(Vec::new())),
-                object: None,
+                request_object: None,
+                memory_object: None,
                 service: Some(s)
             }
         }
 
         pub async fn bind(&mut self, obj: Arc<Mutex<RequestObject>>) {
-            self.object = Some(obj);
-            self.object
+            self.request_object = Some(obj);
+            self.request_object
                 .as_ref()
                 .unwrap()
                 .lock()
                 .await
                 .set_cap(self.clone());
             // TODO set correct cap type
-            debug!("Binding obj {:?} to cap {:?}", self.object, self.cap_id);
+            debug!("Binding obj {:?} to cap {:?}", self.request_object, self.cap_id);
         }
 
         pub async fn delegate(
@@ -207,7 +212,7 @@ pub mod tcap {
         }
 
         pub(crate) async fn run(&self, continuation: Option<Arc<Mutex<Capability>>>) -> Result<(), ()> {
-            match self.object.as_ref() {
+            match self.request_object.as_ref() {
                 Some(o) => o.lock().await.invoke(continuation).await,
                 None => {
                     error!(
@@ -215,6 +220,32 @@ pub mod tcap {
                         self
                     );
                     Err(())
+                }
+            }
+        }
+
+        pub async fn get_buffer(&self) -> Arc<Mutex<MemoryObject>> {
+            if self.cap_type != CapType::Memory {
+                panic!("get_buffer() can only be called on memory capabilities");
+            }
+            match self.memory_object.as_ref().unwrap().lock().await.is_local().await {
+                true => {
+                    self.memory_object.as_ref().unwrap().clone()
+                }
+                false => {
+                    let data: Box<[u8; std::mem::size_of::<MemoryCopyRequestHeader>()]> = MemoryCopyRequestHeader::construct(self.cap_id).into();
+
+                    let req = SendRequest::new(self.owner_address.into(), data);
+
+                    match self.service.as_ref().unwrap().lock().await.send(req, true).await {
+                        None => {
+                            panic!("Response to MemoryCopy Request should not be None");
+                        }
+                        Some(resp) => {
+                            let resp = MemoryCopyResponseHeader::from(resp.data);
+                            Arc::new(Mutex::new(MemoryObject::from(resp)))
+                        }
+                    }
                 }
             }
         }
