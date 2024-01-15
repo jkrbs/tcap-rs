@@ -519,6 +519,9 @@ pub mod tcap {
     }
 
     mod tests {
+        #[allow(unused_imports)] // Not sure, why the import is detected as unused.
+        use crate::packet_types::tcap::IpAddress;
+
         #[test]
         fn test_create_ip_addr_object_from_string() {
             let obj = IpAddress::from("10.0.0.1:1234");

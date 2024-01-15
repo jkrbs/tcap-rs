@@ -152,9 +152,9 @@ pub mod tcap {
                             .await
                             .insert(packet.stream_id, packet.response_notification.clone());
 
-                        match s.socket.send_to(&packet.data, packet.dest).await {
+                        match s.socket.send_to(&packet.data, packet.dest.clone()).await {
                             Ok(b) => debug!("sent {:?} bytes", b),
-                            Err(_) => panic!("failed to send network packet"),
+                            Err(_) => panic!("failed to send network packet to {:?}", packet.dest),
                         };
                     } else {
                         info!("Received None Type from Udp Sender queue. This is probably a bug.");
@@ -278,7 +278,7 @@ pub mod tcap {
                     let continuation = match hdr.continutaion_cap_id {
                         0 => None,
                         // TODO (@jkrbs): do not require a previous delegation for the invocation
-                        s => Some(self.cap_table.get(s).await.unwrap())
+                        s => self.cap_table.get(s).await
                     };
                     let capid = cap.lock().await.cap_id;
                     let packet: Box<[u8; std::mem::size_of::<RequestResponseHeader>()]> = match cap

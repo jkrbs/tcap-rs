@@ -127,11 +127,21 @@ pub mod tcap {
                     .into();
             debug!("packet to be send: {:?}", packet);
 
+            #[cfg(feature="directCPcommunication")]
+            {
+                let ctrl_plane = self.service.as_ref().unwrap().lock().await.config.switch_addr.clone();
+                let _ = self.service.as_ref().unwrap().lock().await.send(SendRequest::new(ctrl_plane, packet.clone()), false).await;    
+            }
+            
             let dest: String = delegatee.into();
             let _ = self.service.as_ref().unwrap().lock().await.send(SendRequest::new(dest, packet), false).await;
+            
             Ok(())
         }
 
+        /**
+         * Revoke all delegations of the capability
+         */
         pub async fn revoke(&self, s: Service) -> tokio::io::Result<()> {
             let address = s.config.address.clone();
             let packet: Box<[u8; std::mem::size_of::<RevokeCapHeader>()]> =
@@ -139,12 +149,36 @@ pub mod tcap {
 
             debug!("packet to be send: {:?}", packet);
 
+            #[cfg(feature="directCPcommunication")]
+            {
+                let ctrl_plane = self.service.as_ref().unwrap().lock().await.config.switch_addr.clone();
+                let _ = s
+                    .send(SendRequest::new(ctrl_plane, packet.clone()), false)
+                    .await;
+            }
+
             for delegatee in self.delegatees.lock().await.clone() {
                 let _ = s
                     .send(SendRequest::new(delegatee.into(), packet.clone()), false)
                     .await;
             }
 
+            Ok(())
+        }
+
+        pub async fn revoke_on_node(&self, s: Service, node: IpAddress) -> tokio::io::Result<()> {
+            let packet: Box<[u8; std::mem::size_of::<RevokeCapHeader>()]> =
+                RevokeCapHeader::construct(self, node).into();
+
+            debug!("packet to be send: {:?}", packet);
+
+            #[cfg(feature="directCPcommunication")]
+            {
+                let ctrl_plane = self.service.as_ref().unwrap().lock().await.config.switch_addr.clone();
+                let _ = s
+                    .send(SendRequest::new(ctrl_plane, packet.clone()), false)
+                    .await;
+            }
             Ok(())
         }
 
