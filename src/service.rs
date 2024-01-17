@@ -4,7 +4,7 @@ pub mod tcap {
     use std::io;
 
     use crate::cap_table::tcap::cap_table::CapTable;
-    use crate::capabilities::tcap::{Capability, CapType};
+    use crate::capabilities::tcap::{Capability, CapType, CapID};
     use crate::packet_types::tcap::*;
     use crate::config::Config;
     use log::{debug, info, warn};
@@ -107,7 +107,7 @@ pub mod tcap {
          * It is a work around, as there is no global name service or authentication broker
          * TODO (@jkrbs): Build name service or initial cap distribution system
          */
-        pub async fn create_capability_with_id(&self, cap_id: u64) -> Arc<Mutex<Capability>> {
+        pub async fn create_capability_with_id(&self, cap_id: CapID) -> Arc<Mutex<Capability>> {
             let c = Arc::new(Mutex::new(
                 Capability::create_with_id(Arc::new(Mutex::new(self.clone())), cap_id).await,
             ));
@@ -117,7 +117,7 @@ pub mod tcap {
             c
         }
 
-        pub async fn create_remote_capability_with_id(&self, owner: String, cap_id: u64) -> Arc<Mutex<Capability>> {
+        pub async fn create_remote_capability_with_id(&self, owner: String, cap_id: CapID) -> Arc<Mutex<Capability>> {
             let owner_address = IpAddress::from(owner.as_str());
             let c = Arc::new(Mutex::new(
                 Capability::create_remote_with_id(Arc::new(Mutex::new(self.clone())), owner_address, cap_id).await,

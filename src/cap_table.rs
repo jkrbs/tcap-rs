@@ -5,10 +5,7 @@ pub mod tcap {
         use log::debug;
         use tokio::sync::Mutex;
 
-        use crate::capabilities::tcap::Capability;
-
-        type CapID = u64;
-
+        use crate::capabilities::tcap::{Capability, CapID};
         #[derive(Debug, Clone)]
         pub(crate) struct CapTable {
             caps: Arc<Mutex<HashMap<CapID, Arc<Mutex<Capability>>>>>,

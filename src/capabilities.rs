@@ -20,6 +20,8 @@ pub mod tcap {
         Memory = 2,
     }
 
+    pub type CapID = u128;
+
     impl From<u8> for CapType {
         fn from(value: u8) -> Self {
             match value {
@@ -43,7 +45,7 @@ pub mod tcap {
 
     #[derive(Clone, Debug)]
     pub struct Capability {
-        pub cap_id: u64,
+        pub cap_id: CapID,
         pub cap_type: CapType,
         owner_address: IpAddress,
         delegatees: Arc<Mutex<Vec<IpAddress>>>,
@@ -69,7 +71,7 @@ pub mod tcap {
     impl Capability {
         pub(crate) async fn create(s: Arc<Mutex<Service>>) -> Capability {
             let mut rng = rand::thread_rng();
-            let cap_id = rng.gen::<u64>();
+            let cap_id = rng.gen::<CapID>();
 
             let owner_address = IpAddress::from(s.lock().await.config.address.as_str());
 
@@ -84,7 +86,7 @@ pub mod tcap {
             }
         }
 
-        pub(crate) async fn create_with_id(s: Arc<Mutex<Service>>, cap_id: u64) -> Capability {
+        pub(crate) async fn create_with_id(s: Arc<Mutex<Service>>, cap_id: CapID) -> Capability {
             let owner_address = IpAddress::from(s.lock().await.config.address.as_str());
             Capability {
                 cap_id,
@@ -97,7 +99,7 @@ pub mod tcap {
             }
         }
 
-        pub(crate) async fn create_remote_with_id(s: Arc<Mutex<Service>>, owner_address: IpAddress,cap_id: u64) -> Capability {
+        pub(crate) async fn create_remote_with_id(s: Arc<Mutex<Service>>, owner_address: IpAddress,cap_id: CapID) -> Capability {
             Capability {
                 cap_id,
                 cap_type: CapType::None,

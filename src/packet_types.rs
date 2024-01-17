@@ -1,5 +1,5 @@
 pub mod tcap {
-    use crate::{capabilities::tcap::Capability, object::tcap::object::MemoryObject};
+    use crate::{capabilities::tcap::{Capability, CapID}, object::tcap::object::MemoryObject};
     use bytemuck::*;
     use tokio::sync::Mutex;
     use std::{
@@ -171,7 +171,7 @@ pub mod tcap {
         size: u64,
         pub(crate) stream_id: u32,
         cmd: u32,
-        pub(crate) cap_id: u64,
+        pub(crate) cap_id: CapID,
     }
 
     #[repr(C, packed)]
@@ -215,7 +215,7 @@ pub mod tcap {
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub struct RequestInvokeHeader {
         pub(crate) common: CommonHeader,
-        pub(crate) continutaion_cap_id: u64   
+        pub(crate) continutaion_cap_id: CapID   
     }
 
     impl Into<Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]>> for RequestInvokeHeader {
@@ -227,7 +227,7 @@ pub mod tcap {
     }
 
     impl RequestInvokeHeader {
-        pub(crate) fn construct(cap: Capability, continutaion_cap_id: u64) -> RequestInvokeHeader {
+        pub(crate) fn construct(cap: Capability, continutaion_cap_id: CapID) -> RequestInvokeHeader {
             let mut rng = rand::thread_rng();
             let stream_id = rand::Rng::gen::<u32>(&mut rng);
 
@@ -266,7 +266,7 @@ pub mod tcap {
     }
 
     impl CapInvalidHeader {
-        pub fn construct(cap_id: u64, stream_id: u32) -> CapInvalidHeader {
+        pub fn construct(cap_id: CapID, stream_id: u32) -> CapInvalidHeader {
             CapInvalidHeader {
                 common: CommonHeader {
                     size: 0,
@@ -287,7 +287,7 @@ pub mod tcap {
 
     impl RequestResponseHeader {
         pub(crate) async fn construct(
-            cap_id: u64,
+            cap_id: CapID,
             stream_id: u32,
             response_code: u64,
         ) -> RequestResponseHeader {
@@ -328,7 +328,7 @@ pub mod tcap {
     pub struct InsertCapHeader {
         pub(crate) common: CommonHeader,
         pub(crate) cap_owner_ip: IpAddress,
-        pub(crate) cap_id: u64,
+        pub(crate) cap_id: CapID,
         pub(crate) cap_type: u8,
         pub(crate) object_owner: IpAddress,
     }
@@ -387,7 +387,7 @@ pub mod tcap {
     pub(crate) struct RevokeCapHeader {
         common: CommonHeader,
         pub cap_owner_ip: IpAddress,
-        pub cap_id: u64,
+        pub cap_id: CapID,
     }
 
     impl RevokeCapHeader {
@@ -564,7 +564,7 @@ pub mod tcap {
         }
     }
     impl MemoryCopyRequestHeader {
-        pub fn construct(cap_id: u64) -> MemoryCopyRequestHeader {
+        pub fn construct(cap_id: CapID) -> MemoryCopyRequestHeader {
             let mut rng = rand::thread_rng();
             let stream_id = rand::Rng::gen::<u32>(&mut rng);
 
