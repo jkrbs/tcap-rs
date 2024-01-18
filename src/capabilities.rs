@@ -111,7 +111,12 @@ pub mod tcap {
             }
         }
 
+        #[deprecated = "Memory objects are supported, `bind_req` should now be used for request objects"]
         pub async fn bind(&mut self, obj: Arc<Mutex<RequestObject>>) {
+            self.bind_req(obj).await;
+        }
+
+        pub async fn bind_req(&mut self, obj: Arc<Mutex<RequestObject>>) {
             self.request_object = Some(obj);
             self.request_object
                 .as_ref()
@@ -119,8 +124,20 @@ pub mod tcap {
                 .lock()
                 .await
                 .set_cap(self.clone());
-            // TODO set correct cap type
+            self.cap_type = CapType::Request;
             debug!("Binding obj {:?} to cap {:?}", self.request_object, self.cap_id);
+        }
+
+        pub async fn bind_mem(&mut self, obj: Arc<Mutex<MemoryObject>>) {
+            self.memory_object = Some(obj);
+            self.memory_object
+                .as_ref()
+                .unwrap()
+                .lock()
+                .await
+                .set_cap(self.clone());
+            self.cap_type = CapType::Memory;
+            debug!("Binding obj {:?} to cap {:?}", self.memory_object, self.cap_id);
         }
 
         pub async fn delegate(
