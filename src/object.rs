@@ -11,7 +11,7 @@ pub mod tcap {
         pub struct RequestObject {
             is_local: bool,
             pub(crate) cap: Option<Capability>,
-            function: Box<dyn Fn(Option<Arc<Mutex<Capability>>>) -> Result<(), ()> + Send + Sync>,
+            function: Box<dyn Fn(Vec<Option<Arc<Mutex<Capability>>>>) -> Result<(), ()> + Send + Sync>,
         }
 
         impl fmt::Debug for RequestObject {
@@ -25,7 +25,7 @@ pub mod tcap {
 
         impl RequestObject {
             pub async fn new(
-                function: Box<dyn Fn(Option<Arc<Mutex<Capability>>>) -> Result<(), ()> + Send + Sync>,
+                function: Box<dyn Fn(Vec<Option<Arc<Mutex<Capability>>>>) -> Result<(), ()> + Send + Sync>,
             ) -> RequestObject {
                 RequestObject {
                     is_local: true,
@@ -42,11 +42,11 @@ pub mod tcap {
                 self.cap = Some(c);
             }
 
-            pub async fn invoke(&self, continuation: Option<Arc<Mutex<Capability>>>) -> Result<(), ()> {
+            pub async fn invoke(&self, continuations: Vec<Option<Arc<Mutex<Capability>>>>) -> Result<(), ()> {
                 debug!("invoking Request Object");
                 if self.is_local {
                     debug!("Calling RequestObject Function");
-                    return self.function.as_ref()(continuation);
+                    return self.function.as_ref()(continuations);
                 } else {
                     return self.cap.as_ref().unwrap().request_invoke().await;
                 }

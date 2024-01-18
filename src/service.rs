@@ -276,16 +276,20 @@ pub mod tcap {
                     }
 
                     let cap = self.cap_table.get(hdr.common.cap_id).await.unwrap();
-                    let continuation = match hdr.continutaion_cap_id {
-                        0 => None,
-                        // TODO (@jkrbs): do not require a previous delegation for the invocation
-                        s => self.cap_table.get(s).await
-                    };
+                    let mut continuations = vec!();
+                    for i in 0..hdr.number_of_conts {
+                        let c = match hdr.continutaion_cap_ids[i as usize] {
+                            0 => None,
+                            // TODO (@jkrbs): do not require a previous delegation for the invocation
+                            s => self.cap_table.get(s).await
+                        };
+                        continuations.push(c);
+                    }
                     let capid = cap.lock().await.cap_id;
                     let packet: Box<[u8; std::mem::size_of::<RequestResponseHeader>()]> = match cap
                         .lock()
                         .await
-                        .run(continuation)
+                        .run(continuations)
                         .await
                     {
                         Ok(_) => {

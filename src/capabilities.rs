@@ -190,17 +190,20 @@ pub mod tcap {
         }
 
         pub async fn request_invoke(&self) -> Result<(), ()> {
-            self.request_invoke_with_continuation(None).await
+            self.request_invoke_with_continuation(vec!()).await
         }
 
-        pub async fn request_invoke_with_continuation(&self, continuation: Option<Arc<Mutex<Capability>>>) -> Result<(), ()> {
-            let cont_id = match continuation{
-                None => 0,
-                Some(c) => c.lock().await.cap_id
-            };
+        pub async fn request_invoke_with_continuation(&self, continuations: Vec<Option<Arc<Mutex<Capability>>>>) -> Result<(), ()> {
+            let mut cont_ids: [CapID; 4] = [0;4];
+            for i in 0..4.min(continuations.len()) {
+                cont_ids[i] = match &continuations[i]{
+                    None => 0,
+                    Some(c) => c.lock().await.cap_id
+                };
+            }
 
             let packet: Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]> =
-            RequestInvokeHeader::construct(self.clone(), cont_id).into();
+            RequestInvokeHeader::construct(self.clone(), continuations.len() as u8, cont_ids).into();
 
             let resp = self.service.as_ref().unwrap().lock().await
                 .send(SendRequest::new(self.owner_address.into(), packet), true)
@@ -213,9 +216,9 @@ pub mod tcap {
             Ok(())
         }
 
-        pub(crate) async fn run(&self, continuation: Option<Arc<Mutex<Capability>>>) -> Result<(), ()> {
+        pub(crate) async fn run(&self, continuations: Vec<Option<Arc<Mutex<Capability>>>>) -> Result<(), ()> {
             match self.request_object.as_ref() {
-                Some(o) => o.lock().await.invoke(continuation).await,
+                Some(o) => o.lock().await.invoke(continuations).await,
                 None => {
                     error!(
                         "Cap {:?} has no Request object bound and cannot be run!",

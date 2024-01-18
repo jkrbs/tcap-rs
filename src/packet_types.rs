@@ -215,7 +215,8 @@ pub mod tcap {
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub struct RequestInvokeHeader {
         pub(crate) common: CommonHeader,
-        pub(crate) continutaion_cap_id: CapID   
+        pub(crate) number_of_conts: u8,
+        pub(crate) continutaion_cap_ids: [CapID;4]  
     }
 
     impl Into<Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]>> for RequestInvokeHeader {
@@ -227,7 +228,7 @@ pub mod tcap {
     }
 
     impl RequestInvokeHeader {
-        pub(crate) fn construct(cap: Capability, continutaion_cap_id: CapID) -> RequestInvokeHeader {
+        pub(crate) fn construct(cap: Capability, number_of_conts: u8, continutaion_cap_ids: [CapID; 4]) -> RequestInvokeHeader {
             let mut rng = rand::thread_rng();
             let stream_id = rand::Rng::gen::<u32>(&mut rng);
 
@@ -240,7 +241,8 @@ pub mod tcap {
                     cmd: CmdType::RequestInvoke as u32,
                     cap_id: cap.cap_id
                 },
-                continutaion_cap_id
+                number_of_conts,
+                continutaion_cap_ids
             }
         }
     }
