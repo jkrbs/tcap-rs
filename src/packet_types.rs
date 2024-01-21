@@ -106,7 +106,7 @@ pub mod tcap {
     }
 
     #[repr(u32)]
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug, PartialEq)]
     pub enum CmdType {
         Nop = 0,
         CapGetInfo = 1,

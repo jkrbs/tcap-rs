@@ -4,7 +4,7 @@ pub mod tcap {
     use crate::{
         object::tcap::object::{RequestObject, MemoryObject},
         packet_types::tcap::{
-            InsertCapHeader, IpAddress, RequestInvokeHeader, RequestResponseHeader, RevokeCapHeader, MemoryCopyRequestHeader, MemoryCopyResponseHeader,
+            InsertCapHeader, IpAddress, RequestInvokeHeader, RequestResponseHeader, RevokeCapHeader, MemoryCopyRequestHeader, MemoryCopyResponseHeader, CmdType,
         },
         service::tcap::{SendRequest, Service},
     };
@@ -65,6 +65,12 @@ pub mod tcap {
                 memory_object: None,
                 service: None
             }
+        }
+    }
+
+    impl PartialEq for Capability {
+        fn eq(&self, other: &Self) -> bool {
+            self.cap_id == other.cap_id
         }
     }
 
@@ -210,14 +216,14 @@ pub mod tcap {
             self.request_invoke_with_continuation(vec!()).await
         }
 
-        pub async fn request_invoke_with_continuation(&self, continuations: Vec<Option<Arc<Mutex<Capability>>>>) -> Result<(), ()> {
+        pub async fn request_invoke_with_continuation(&self, continuations: Vec<CapID>) -> Result<(), ()> {
+            debug!("in request invocation with cont handler");
+
             let mut cont_ids: [CapID; 4] = [0;4];
             for i in 0..4.min(continuations.len()) {
-                cont_ids[i] = match &continuations[i]{
-                    None => 0,
-                    Some(c) => c.lock().await.cap_id
-                };
+                cont_ids[i] = continuations[i];
             }
+            debug!("capids for continuations are: {:?}", cont_ids.clone());
 
             let packet: Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]> =
             RequestInvokeHeader::construct(self.clone(), continuations.len() as u8, cont_ids).into();
@@ -225,6 +231,11 @@ pub mod tcap {
             let resp = self.service.as_ref().unwrap().lock().await
                 .send(SendRequest::new(self.owner_address.into(), packet), true)
                 .await;
+
+            debug!("Packet type is {:?}", CmdType::from(* bytemuck::from_bytes::<u32>(&resp.as_ref().unwrap().data[12..16])));
+            if CmdType::from(* bytemuck::from_bytes::<u32>(&resp.as_ref().unwrap().data[12..16])) != CmdType::RequestResponse {
+                return Err(());
+            }
 
             let resp = RequestResponseHeader::from(resp.unwrap().data);
             if resp.response_code != 0 {

@@ -129,6 +129,8 @@ pub mod tcap {
         }
 
         pub async fn terminate(&self) {
+            info!("Terminating Service");
+
             for cap_id in self.cap_table.get_capids().await {
                 let cap =  self.cap_table.get(cap_id).await;
                 if let Some(cap) = cap {
@@ -166,13 +168,13 @@ pub mod tcap {
             let s = self.clone();
             let receiver_handle = tokio::spawn(async move {
                 loop {
-                    let mut buf = vec![];
+                    let mut buf = Vec::with_capacity(512);
 
                     match s.socket.recv_buf_from(&mut buf).await {
                         Ok((received_bytes, sender)) => {
                             debug!(
-                                "Service at {:?} Received packet from {:?}",
-                                s.config.address, sender
+                                "Service at {:?} Received packet from {:?} size {:?}, cmdtype {:?}",
+                                s.config.address, sender, received_bytes, CmdType::from(u32::from_be_bytes(*bytemuck::from_bytes(&buf[11..15])))
                             );
                             if IpAddress::from(s.config.address.as_str()).equals(sender) {
                                 debug!("ignoring packet");
@@ -183,11 +185,6 @@ pub mod tcap {
                             assert!(
                                 received_bytes >= std::mem::size_of::<CommonHeader>(),
                                 "Received packets must includethe common header"
-                            );
-                            debug!(
-                                "[8..12]: {:?}, [9..13]: {:?}",
-                                u32::from_be_bytes(*bytemuck::from_bytes(&buf[8..12])),
-                                u32::from_be_bytes(*bytemuck::from_bytes(&buf[9..13]))
                             );
                             let stream_id = u32::from_be_bytes(*bytemuck::from_bytes(&buf[8..12]));
                             debug!("Received packet with stream id {:?}", stream_id);
@@ -313,6 +310,8 @@ pub mod tcap {
                 CmdType::RequestReceive => todo!(),
                 CmdType::None => todo!(),
                 CmdType::InsertCap => {
+                    debug!("received insert cap packet with len {:?}", packet.len());
+
                     let hdr = InsertCapHeader::from(packet);
                     debug!("Received CapInsert: {:?}", hdr);
                     let cap = Arc::new(Mutex::new(Capability::from(hdr)));

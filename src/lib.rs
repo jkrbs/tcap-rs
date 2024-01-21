@@ -13,3 +13,12 @@ use config::Config;
 use object::tcap::object::RequestObject;
 #[allow(unused_imports)]
 use capabilities::tcap::Capability;
+
+pub mod tcap {
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use crate::capabilities::tcap::Capability;
+    
+    #[allow(unused)]
+    pub type HandlerParameters = Vec<Option<Arc<Mutex<Capability>>>>;
+}

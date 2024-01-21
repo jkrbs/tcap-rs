@@ -48,7 +48,12 @@ pub mod tcap {
                     debug!("Calling RequestObject Function");
                     return self.function.as_ref()(continuations);
                 } else {
-                    return self.cap.as_ref().unwrap().request_invoke().await;
+                    return self.cap.as_ref().unwrap().request_invoke_with_continuation(continuations.iter().map(|c| {
+                        match c {
+                            Some(c) => c.blocking_lock().cap_id,
+                            None => 0,
+                        }
+                    }).collect()).await;
                 }
             }
         }
