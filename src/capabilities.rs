@@ -4,7 +4,7 @@ pub mod tcap {
     use crate::{
         object::tcap::object::{RequestObject, MemoryObject},
         packet_types::tcap::{
-            InsertCapHeader, IpAddress, RequestInvokeHeader, RequestResponseHeader, RevokeCapHeader, MemoryCopyRequestHeader, MemoryCopyResponseHeader, CmdType,
+            CmdType, Flags, InsertCapHeader, IpAddress, MemoryCopyRequestHeader, MemoryCopyResponseHeader, RequestInvokeHeader, RequestResponseHeader, RevokeCapHeader
         },
         service::tcap::{SendRequest, Service},
     };
@@ -237,8 +237,11 @@ pub mod tcap {
             }
             debug!("capids for continuations are: {:?}", cont_ids.clone());
 
+            let mut flags = Flags::empty();
+            flags.set(Flags::REQUIRE_RESPONSE, wait);
+
             let packet: Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]> =
-            RequestInvokeHeader::construct(self.clone(), continuations.len() as u8, cont_ids).into();
+            RequestInvokeHeader::construct(self.clone(), continuations.len() as u8, cont_ids, flags).into();
 
             let resp = self.service.as_ref().unwrap().lock().await
                 .send(SendRequest::new(self.owner_address.into(), packet), wait)

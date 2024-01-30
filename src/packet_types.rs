@@ -137,6 +137,14 @@ pub mod tcap {
         ControllerStopTimer = 131
     }
 
+    bitflags! {
+        #[repr(C, packed)]
+        #[derive(Copy, Clone, Debug, PartialEq)]    
+        pub struct Flags: u8 {
+            const REQUIRE_RESPONSE = 1;
+        }
+    }
+
     impl From<u32> for CmdType {
         fn from(value: u32) -> Self {
             match value {
@@ -216,7 +224,8 @@ pub mod tcap {
     pub struct RequestInvokeHeader {
         pub(crate) common: CommonHeader,
         pub(crate) number_of_conts: u8,
-        pub(crate) continutaion_cap_ids: [CapID;4]  
+        pub(crate) continutaion_cap_ids: [CapID;4],
+        pub(crate) flags: u8
     }
 
     impl Into<Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]>> for RequestInvokeHeader {
@@ -228,7 +237,7 @@ pub mod tcap {
     }
 
     impl RequestInvokeHeader {
-        pub(crate) fn construct(cap: Capability, number_of_conts: u8, continutaion_cap_ids: [CapID; 4]) -> RequestInvokeHeader {
+        pub(crate) fn construct(cap: Capability, number_of_conts: u8, continutaion_cap_ids: [CapID; 4], flags: Flags) -> RequestInvokeHeader {
             let mut rng = rand::thread_rng();
             let stream_id = rand::Rng::gen::<u32>(&mut rng);
 
@@ -242,7 +251,8 @@ pub mod tcap {
                     cap_id: cap.cap_id
                 },
                 number_of_conts,
-                continutaion_cap_ids
+                continutaion_cap_ids,
+                flags: flags.bits()
             }
         }
     }

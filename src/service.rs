@@ -311,11 +311,21 @@ pub mod tcap {
                         continuations.push(c);
                     }
                     let capid = cap.lock().await.cap_id;
-                    let packet: Box<[u8; std::mem::size_of::<RequestResponseHeader>()]> = match cap
-                        .lock()
-                        .await
-                        .run(continuations)
-                        .await
+
+                    let result = cap
+                    .lock()
+                    .await
+                    .run(continuations)
+                    .await;
+                    debug!("Flags: {:?}", hdr.flags);
+                    if ! Flags::from_bits(hdr.flags)
+                            .expect("Invalid Bits set in RequestInvoke Flag")
+                            .contains(Flags::REQUIRE_RESPONSE) {
+                        debug!("Not sending response packet");
+                        return;
+                    }
+
+                    let packet: Box<[u8; std::mem::size_of::<RequestResponseHeader>()]> = match result
                     {
                         Ok(_) => {
                             debug!("result ok: constructing reponse header with code 0");
