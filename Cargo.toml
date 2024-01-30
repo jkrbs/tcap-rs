@@ -19,4 +19,5 @@ clap = { version = "4.4.7", features = ["derive"] }
 
 [features]
 directCPcommunication = []
-default = [ "directCPcommunication" ]
+net-stats = []
+default = [ "directCPcommunication", "net-stats"]

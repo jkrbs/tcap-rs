@@ -1,5 +1,6 @@
 pub mod tcap {
     use std::collections::HashMap;
+    use std::ops::AddAssign;
     use std::sync::Arc;
     use std::io;
 
@@ -7,7 +8,7 @@ pub mod tcap {
     use crate::capabilities::tcap::{Capability, CapType, CapID};
     use crate::packet_types::tcap::*;
     use crate::config::Config;
-    use log::{debug, info, warn};
+    use log::{debug, error, info, warn};
     use tokio::net::UdpSocket;
     use tokio::sync::{mpsc, Mutex, Notify};
 
@@ -20,7 +21,11 @@ pub mod tcap {
         responses: Arc<Mutex<HashMap<u32, Response>>>,
         response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>,
         pub(crate) cap_table: CapTable,
-        termination_notifier: Arc<Notify>
+        termination_notifier: Arc<Notify>,
+        #[cfg(feature="net-stats")]
+        pub send_counter: Arc<Mutex<u128>>,
+        #[cfg(feature="net-stats")]
+        pub recv_counter: Arc<Mutex<u128>>
     }
 
     #[derive(Debug, Clone)]
@@ -86,6 +91,10 @@ pub mod tcap {
                 response_notifiers,
                 cap_table,
                 termination_notifier,
+                #[cfg(feature="net-stats")]
+                send_counter: Arc::new(Mutex::new(0)),
+                #[cfg(feature="net-stats")]
+                recv_counter: Arc::new(Mutex::new(0))
             }
         }
 
@@ -138,6 +147,10 @@ pub mod tcap {
                 }
             }
             self.termination_notifier.clone().notify_waiters();
+            info!("refcount of socket should now be 1, is {:?}", Arc::strong_count(&self.socket));
+            
+            #[cfg(feature="net-stats")]
+            info!("Send Counter: {:?}, Receive Counter: {:?}", self.send_counter.lock().await, self.recv_counter.lock().await, )
         }
 
         pub async fn run(&self) -> io::Result<()> {
@@ -158,6 +171,8 @@ pub mod tcap {
                             Ok(b) => debug!("sent {:?} bytes", b),
                             Err(_) => panic!("failed to send network packet to {:?}", packet.dest),
                         };
+                        #[cfg(feature="net-stats")]
+                        s.send_counter.lock().await.add_assign(1);
                     } else {
                         info!("Received None Type from Udp Sender queue. This is probably a bug.");
                     }
@@ -172,6 +187,8 @@ pub mod tcap {
 
                     match s.socket.recv_buf_from(&mut buf).await {
                         Ok((received_bytes, sender)) => {
+                            #[cfg(feature="net-stats")]
+                            s.recv_counter.lock().await.add_assign(1);
                             debug!(
                                 "Service at {:?} Received packet from {:?} size {:?}, cmdtype {:?}",
                                 s.config.address, sender, received_bytes, CmdType::from(u32::from_be_bytes(*bytemuck::from_bytes(&buf[11..15])))
@@ -216,9 +233,11 @@ pub mod tcap {
             });
             
             self.termination_notifier.clone().notified().await;
+            
             let  _ = sender_handle.abort();
             let  _ = receiver_handle.abort();
 
+            info!("aborted all service threads");
             Ok(())
         }
 
@@ -264,9 +283,12 @@ pub mod tcap {
 
                     if !self.cap_table.contains(hdr.common.cap_id).await {
                         let packet: Box<[u8; std::mem::size_of::<CapInvalidHeader>()]> =
-                            CapInvalidHeader::construct(hdr.common.cap_id, hdr.common.stream_id)
+                            CapInvalidHeader::construct(hdr.common.cap_id, source.clone().as_str().into(), hdr.common.stream_id)
                                 .into();
-
+                        #[cfg(feature="directCPcommunication")]
+                        self.send(SendRequest::new(self.config.switch_addr.clone(), packet.clone()), false)
+                            .await;
+                        
                         self.send(SendRequest::new(source, packet), false)
                             .await;
                         return;
@@ -274,11 +296,17 @@ pub mod tcap {
 
                     let cap = self.cap_table.get(hdr.common.cap_id).await.unwrap();
                     let mut continuations = vec!();
-                    for i in 0..hdr.number_of_conts {
+                    for i in 0..hdr.number_of_conts.min(4) {
                         let c = match hdr.continutaion_cap_ids[i as usize] {
                             0 => None,
                             // TODO (@jkrbs): do not require a previous delegation for the invocation
-                            s => self.cap_table.get(s).await
+                            s => match self.cap_table.get(s).await {
+                                Some(cap) => Some(cap),
+                                None => {
+                                    error!("Received Request Invoke with parameters, which are not in the cap table");
+                                    None
+                                } 
+                            },
                         };
                         continuations.push(c);
                     }
@@ -332,8 +360,12 @@ pub mod tcap {
                     let hdr = MemoryCopyRequestHeader::from(packet.clone());
                     if !self.cap_table.contains(hdr.common.cap_id).await {
                         let packet: Box<[u8; std::mem::size_of::<CapInvalidHeader>()]> =
-                            CapInvalidHeader::construct(hdr.common.cap_id, hdr.common.stream_id)
+                            CapInvalidHeader::construct(hdr.common.cap_id, source.clone().as_str().into(), hdr.common.stream_id)
                                 .into();
+
+                        #[cfg(feature="directCPcommunication")]
+                        self.send(SendRequest::new(self.config.switch_addr.clone(), packet.clone()), false)
+                            .await;
 
                         self.send(SendRequest::new(source, packet), false)
                             .await;

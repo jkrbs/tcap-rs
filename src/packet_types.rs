@@ -30,7 +30,7 @@ pub mod tcap {
             if val.contains(':') {
                 //port provided
                 let mut s = val.split(':');
-                assert!(s.clone().count() == 2, "Ip address:port splitted at ':' must have two elements, address and port number");
+                assert!(s.clone().count() == 2, "Ip address:port splitted at ':' must have two elements, address and port number {:?}", s);
 
                 port = Some(
                     String::from(s.clone().last().unwrap())
@@ -251,6 +251,8 @@ pub mod tcap {
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct CapInvalidHeader {
         common: CommonHeader,
+        address: [u8; 4],
+        cap_id: CapID
     }
 
     impl Into<Box<[u8; std::mem::size_of::<CapInvalidHeader>()]>> for CapInvalidHeader {
@@ -268,7 +270,7 @@ pub mod tcap {
     }
 
     impl CapInvalidHeader {
-        pub fn construct(cap_id: CapID, stream_id: u32) -> CapInvalidHeader {
+        pub fn construct(cap_id: CapID, address: IpAddress, stream_id: u32) -> CapInvalidHeader {
             CapInvalidHeader {
                 common: CommonHeader {
                     size: 0,
@@ -276,6 +278,8 @@ pub mod tcap {
                     stream_id,
                     cap_id: cap_id,
                 },
+                address: address.address,
+                cap_id
             }
         }
     }
