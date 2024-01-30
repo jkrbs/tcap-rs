@@ -6,6 +6,7 @@ pub mod tcap {
         net::{Ipv4Addr, SocketAddrV4},
         str::FromStr, sync::Arc
     };
+    use bitflags::bitflags;
 
     #[repr(C)]
     #[derive(Clone, Copy, Pod, Zeroable, Debug)]
@@ -262,6 +263,7 @@ pub mod tcap {
     pub(crate) struct CapInvalidHeader {
         common: CommonHeader,
         address: [u8; 4],
+        port: u16,
         cap_id: CapID
     }
 
@@ -289,6 +291,7 @@ pub mod tcap {
                     cap_id: cap_id,
                 },
                 address: address.address,
+                port: address.port,
                 cap_id
             }
         }
@@ -343,10 +346,12 @@ pub mod tcap {
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub struct InsertCapHeader {
         pub(crate) common: CommonHeader,
-        pub(crate) cap_owner_ip: IpAddress,
+        pub(crate) cap_owner_ip: [u8;4],
+        pub(crate) cap_owner_port: u16,
         pub(crate) cap_id: CapID,
         pub(crate) cap_type: u8,
-        pub(crate) object_owner: IpAddress,
+        pub(crate) object_owner_ip_address: [u8; 4],
+        pub(crate) object_owner_port: u16,
     }
 
     impl InsertCapHeader {
@@ -364,10 +369,12 @@ pub mod tcap {
                     stream_id,
                     cap_id: cap.cap_id,
                 },
-                cap_owner_ip: delegatee,
+                cap_owner_ip: delegatee.address,
+                cap_owner_port: delegatee.port,
                 cap_id: cap.cap_id,
                 cap_type: cap.cap_type.into(),
-                object_owner: owner,
+                object_owner_ip_address: owner.address,
+                object_owner_port: owner.port
             }
         }
     }

@@ -59,7 +59,7 @@ pub mod tcap {
             Capability {
                 cap_id: value.cap_id,
                 cap_type: CapType::from(value.cap_type),
-                owner_address: value.object_owner,
+                owner_address: IpAddress{ address: value.object_owner_ip_address, netmask: [0,0,0,0], port: value.object_owner_port},
                 delegatees: Arc::new(Mutex::new(Vec::new())),
                 request_object: None,
                 memory_object: None,

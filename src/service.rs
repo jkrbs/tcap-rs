@@ -270,7 +270,9 @@ pub mod tcap {
                 CmdType::CapIsSame => todo!(),
                 CmdType::CapDiminish => todo!(),
                 CmdType::CapClose => todo!(),
-                CmdType::CapInvalid => {}
+                CmdType::CapInvalid => {
+                    error!("Received CapInvalid packet, but not as response to outgoing stream");
+                }
                 CmdType::CapRevoke => {
                     let hdr = RevokeCapHeader::from(packet);
                     debug!("Received CapRevoke: {:?}", hdr);
