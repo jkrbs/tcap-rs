@@ -177,10 +177,16 @@ pub mod tcap {
     #[repr(C, packed)]
     #[derive(Copy, Clone, Pod, Zeroable, Debug)]
     pub(crate) struct CommonHeader {
-        size: u64,
+        pub(crate) size: u64,
         pub(crate) stream_id: u32,
-        cmd: u32,
+        pub(crate) cmd: u32,
         pub(crate) cap_id: CapID,
+    }
+
+    impl From<Vec<u8>> for CommonHeader {
+        fn from(value: Vec<u8>) -> Self {
+            *bytemuck::from_bytes(&value)
+        }
     }
 
     #[repr(C, packed)]
@@ -593,7 +599,7 @@ pub mod tcap {
 
             MemoryCopyRequestHeader {
                 common: CommonHeader {
-                    size: 0,
+                    size: std::mem::size_of::<MemoryCopyRequestHeader>() as u64,
                     cmd: CmdType::MemoryCopy as u32,
                     stream_id,
                     cap_id: cap_id,
@@ -624,19 +630,16 @@ pub mod tcap {
         }
     }
     impl MemoryCopyResponseHeader {
-        pub(crate) async fn construct(obj: Arc<Mutex<MemoryObject>>) -> MemoryCopyResponseHeader {
+        pub(crate) async fn construct(obj: Arc<Mutex<MemoryObject>>, cap_id: CapID, stream_id: u32) -> MemoryCopyResponseHeader {
             let size = obj.lock().await.size.clone();
             let buffer = obj.lock().await.data.clone();
 
-            let mut rng = rand::thread_rng();
-            let stream_id = rand::Rng::gen::<u32>(&mut rng);
-
             MemoryCopyResponseHeader {
                 common: CommonHeader {
-                    size: 0,
+                    size: std::mem::size_of::<MemoryCopyResponseHeader>() as u64,
                     cmd: CmdType::MemoryCopyResponse as u32,
                     stream_id,
-                    cap_id: 0,
+                    cap_id,
                 },
                size, buffer
             }

@@ -47,7 +47,7 @@ pub mod tcap {
                 data.len(),
                 data
             );
-            let stream_id = u32::from_be_bytes(*bytemuck::from_bytes(&data[8..12]));
+            let stream_id = CommonHeader::from(data[0..std::mem::size_of::<CommonHeader>()].to_vec()).stream_id;
             let response_notification = Arc::new(Notify::new());
             Self {
                 dest,
@@ -187,15 +187,18 @@ pub mod tcap {
             let s = self.clone();
             let receiver_handle = tokio::spawn(async move {
                 loop {
-                    let mut buf = Vec::with_capacity(512);
+                    let mut buf = Vec::with_capacity(2048);
 
                     match s.socket.recv_buf_from(&mut buf).await {
                         Ok((received_bytes, sender)) => {
                             #[cfg(feature="net-stats")]
                             s.recv_counter.lock().await.add_assign(1);
+
+                            let common = CommonHeader::from(buf[0..std::mem::size_of::<CommonHeader>()].to_vec());
+                            let cmd = common.cmd;
                             debug!(
                                 "Service at {:?} Received packet from {:?} size {:?}, cmdtype {:?}",
-                                s.config.address, sender, received_bytes, CmdType::from(u32::from_be_bytes(*bytemuck::from_bytes(&buf[11..15])))
+                                s.config.address, sender, received_bytes, cmd
                             );
                             if IpAddress::from(s.config.address.as_str()).equals(sender) {
                                 debug!("ignoring packet");
@@ -207,7 +210,7 @@ pub mod tcap {
                                 received_bytes >= std::mem::size_of::<CommonHeader>(),
                                 "Received packets must includethe common header"
                             );
-                            let stream_id = u32::from_be_bytes(*bytemuck::from_bytes(&buf[8..12]));
+                            let stream_id = common.stream_id;
                             debug!("Received packet with stream id {:?}", stream_id);
 
                             match s.response_notifiers.lock().await.get(&stream_id) {
@@ -215,7 +218,7 @@ pub mod tcap {
                                     s.responses.lock().await.insert(
                                         stream_id,
                                         Response {
-                                            sender: String::from(""),
+                                            sender: sender.to_string(),
                                             data: buf,
                                         },
                                     );
@@ -225,7 +228,7 @@ pub mod tcap {
                                 None => {
                                     debug!("stream {:?} is not waited for. Trying to parse unsolicited packet", stream_id);
 
-                                    s.parse(sender.to_string(), buf).await;
+                                    s.parse(sender.to_string(), buf, common).await;
                                 }
                             };
                         }
@@ -262,12 +265,12 @@ pub mod tcap {
             None
         }
 
-        async fn parse(&self, source: String, packet: Vec<u8>) {
+        async fn parse(&self, source: String, packet: Vec<u8>, common: CommonHeader) {
             assert!(
                 packet.len() >= std::mem::size_of::<CommonHeader>(),
                 "Received packets must include the common header"
             );
-            let command: u32 = *bytemuck::from_bytes(&packet[12..16]);
+            let command = common.cmd;
             match CmdType::from(command) {
                 CmdType::Nop => todo!(),
                 CmdType::CapGetInfo => todo!(),
@@ -394,7 +397,7 @@ pub mod tcap {
                         panic!("someone ties to capy memory from a non-memory type capability");
                     }
 
-                    let resp: Box<[u8; std::mem::size_of::<MemoryCopyResponseHeader>()]> = MemoryCopyResponseHeader::construct(cap.lock().await.get_buffer().await).await.into();
+                    let resp: Box<[u8; std::mem::size_of::<MemoryCopyResponseHeader>()]> = MemoryCopyResponseHeader::construct(cap.lock().await.get_buffer().await, hdr.common.cap_id, hdr.common.stream_id).await.into();
 
                     debug!("Sent Response packet {:?} to {:?}", packet, source);
                     let _ = self

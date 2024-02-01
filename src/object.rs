@@ -3,7 +3,7 @@ pub mod tcap {
         use core::fmt;
         use log::debug;
         use tokio::sync::Mutex;
-        use std::sync::Arc;
+        use std::{cmp::min, sync::Arc};
 
         //TODO (@jkrbs): Refactor into Object Trait and multiple object types for Memory and Requests at least
         use crate::{capabilities::tcap::Capability, packet_types::tcap::MemoryCopyResponseHeader};
@@ -111,6 +111,10 @@ pub mod tcap {
 
             pub fn set_cap(&mut self, c: Capability) {
                 self.cap = Some(c);
+            }
+
+            pub fn data(&self) -> Vec<u8> {
+                Vec::from(self.data).drain(min(1024, self.size as usize)..).collect()
             }
         }
     }

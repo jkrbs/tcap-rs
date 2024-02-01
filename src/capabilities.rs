@@ -273,11 +273,14 @@ pub mod tcap {
             }
         }
 
-        pub async fn get_buffer(&self) -> Arc<Mutex<MemoryObject>> {
+        pub async fn get_buffer(&mut self) -> Arc<Mutex<MemoryObject>> {
             if self.cap_type != CapType::Memory {
                 panic!("get_buffer() can only be called on memory capabilities");
             }
-            match self.memory_object.as_ref().unwrap().lock().await.is_local().await {
+
+            let local: bool = self.memory_object.is_some() && self.memory_object.as_ref().unwrap().lock().await.is_local().await;
+
+            match local {
                 true => {
                     self.memory_object.as_ref().unwrap().clone()
                 }
@@ -292,7 +295,8 @@ pub mod tcap {
                         }
                         Some(resp) => {
                             let resp = MemoryCopyResponseHeader::from(resp.data);
-                            Arc::new(Mutex::new(MemoryObject::from(resp)))
+                            self.memory_object = Some(Arc::new(Mutex::new(MemoryObject::from(resp))));
+                            self.memory_object.as_ref().unwrap().clone()
                         }
                     }
                 }
