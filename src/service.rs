@@ -137,6 +137,10 @@ pub mod tcap {
             c
         }
 
+        pub async fn delete_capability(&self, cap: Arc<Mutex<Capability>>) {
+            self.cap_table.remove(cap.lock().await.cap_id).await;
+        }
+
         pub async fn terminate(&self) {
             info!("Terminating Service");
 
