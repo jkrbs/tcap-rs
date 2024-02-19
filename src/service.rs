@@ -1,6 +1,6 @@
 pub mod tcap {
     use std::collections::HashMap;
-    use std::ops::AddAssign;
+    use std::ops::{AddAssign, MulAssign};
     use std::sync::Arc;
     use std::io;
 
@@ -11,8 +11,9 @@ pub mod tcap {
     use log::{debug, error, info, warn};
     use tokio::net::UdpSocket;
     use tokio::sync::{mpsc, Mutex, Notify};
-
-    #[derive(Clone, Debug)]
+    use core::fmt;
+    
+    #[derive(Clone)]
     pub struct Service {
         send_channel: Arc<Mutex<mpsc::Sender<SendRequest>>>,
         receiver: Arc<Mutex<mpsc::Receiver<SendRequest>>>,
@@ -26,6 +27,14 @@ pub mod tcap {
         pub send_counter: Arc<Mutex<u128>>,
         #[cfg(feature="net-stats")]
         pub recv_counter: Arc<Mutex<u128>>
+    }
+
+    impl fmt::Debug for Service {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("Service")
+                .field("Config", &self.config)
+                .finish()
+        }
     }
 
     #[derive(Debug, Clone)]
@@ -98,6 +107,14 @@ pub mod tcap {
             }
         }
 
+        pub async fn reset(&self) {
+            self.cap_table.reset().await;
+            self.response_notifiers.lock().await.clear();
+            self.responses.lock().await.clear();
+            self.send_counter.lock().await.mul_assign(0);
+            self.recv_counter.lock().await.mul_assign(0);
+        }
+
         pub fn get_compilation_commit() -> String {
             env!("GIT_HASH").to_string()
         }
@@ -110,6 +127,10 @@ pub mod tcap {
             self.cap_table.insert(c.clone()).await;
 
             c
+        }
+
+        pub async fn cap_exists(&self, cap_id: CapID) -> bool {
+            self.cap_table.contains(cap_id).await
         }
 
         /*** This function create a capability with a predefined cap id
@@ -164,8 +185,6 @@ pub mod tcap {
                 loop {
                     let packet = s.receiver.clone().lock().await.recv().await;
                     if let Some(packet) = packet {
-                        debug!("Received packet via send mpsc: {:?}", packet);
-
                         s.response_notifiers
                             .lock()
                             .await
@@ -192,30 +211,31 @@ pub mod tcap {
                     match s.socket.recv_buf_from(&mut buf).await {
                         Ok((received_bytes, sender)) => {
                             #[cfg(feature="net-stats")]
-                            s.recv_counter.lock().await.add_assign(1);
+                            s.clone().recv_counter.lock().await.add_assign(1);
 
+                            let ss = s.clone();
+                            tokio::spawn(async move {
                             let common = CommonHeader::from(buf[0..std::mem::size_of::<CommonHeader>()].to_vec());
                             let cmd = common.cmd;
                             debug!(
                                 "Service at {:?} Received packet from {:?} size {:?}, cmdtype {:?}",
-                                s.config.address, sender, received_bytes, cmd
+                                ss.config.address, sender, received_bytes, cmd
                             );
-                            if IpAddress::from(s.config.address.as_str()).equals(sender) {
+                            if IpAddress::from(ss.config.address.as_str()).equals(sender) {
                                 debug!("ignoring packet");
-                                continue;
+                                return;
                             }
-                            debug!("received {:?} bytes: {:?}", received_bytes, buf);
 
                             assert!(
                                 received_bytes >= std::mem::size_of::<CommonHeader>(),
-                                "Received packets must includethe common header"
+                                "Received packets must include the common header"
                             );
                             let stream_id = common.stream_id;
                             debug!("Received packet with stream id {:?}", stream_id);
 
-                            match s.response_notifiers.lock().await.get(&stream_id) {
+                            match ss.response_notifiers.lock().await.get(&stream_id) {
                                 Some(notifier) => {
-                                    s.responses.lock().await.insert(
+                                    ss.responses.lock().await.insert(
                                         stream_id,
                                         Response {
                                             sender: sender.to_string(),
@@ -228,9 +248,10 @@ pub mod tcap {
                                 None => {
                                     debug!("stream {:?} is not waited for. Trying to parse unsolicited packet", stream_id);
 
-                                    s.parse(sender.to_string(), buf, common).await;
+                                    ss.parse(sender.to_string(), buf, common).await;
                                 }
                             };
+                        });
                         }
                         Err(e) => {
                             debug!("Error branch of receiver loop: {:?}", e);
@@ -253,7 +274,7 @@ pub mod tcap {
             let notification = r.response_notification.clone();
             debug!(
                 "sending Request: {:?}, stream_id: {:?} via mpsc",
-                r, stream_id
+                r.stream_id, stream_id
             );
             let _ = self.send_channel.clone().lock().await.send(r).await;
 
@@ -376,6 +397,7 @@ pub mod tcap {
                     self.response_notifiers.lock().await.get(&streamid).unwrap().notify_waiters();
                 },
                 CmdType::MemoryCopy => {
+                    debug!("Received MemoryCopy");
                     let hdr = MemoryCopyRequestHeader::from(packet.clone());
                     if !self.cap_table.contains(hdr.common.cap_id).await {
                         let packet: Box<[u8; std::mem::size_of::<CapInvalidHeader>()]> =
@@ -405,6 +427,7 @@ pub mod tcap {
                         .await;
                 },
                 CmdType::MemoryCopyResponse => {
+                    debug!("Received MemoryCopyResponse");
                     let hdr = MemoryCopyRequestHeader::from(packet.clone());
                     let streamid = hdr.common.stream_id;
                     self.responses.lock().await.insert(streamid, Response { sender: "".to_string(), data: packet });

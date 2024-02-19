@@ -18,6 +18,11 @@ pub mod tcap {
                 Self { caps }
             }
 
+            pub(crate) async fn reset(&self) {
+                self.caps.write().await.clear();
+                debug!("Reset Cap Table");
+            }
+
             pub(crate) async fn insert(&self, cap: Arc<Mutex<Capability>>) {
                 let id = cap.lock().await.cap_id;
                 self.caps.write().await.insert(id, cap);
