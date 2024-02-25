@@ -304,7 +304,7 @@ pub mod tcap {
                 CmdType::CapRevoke => {
                     let hdr = RevokeCapHeader::from(packet);
                     debug!("Received CapRevoke: {:?}", hdr);
-                    let _ = self.cap_table.remove(hdr.cap_id).await;
+                    self.cap_table.get(hdr.cap_id).await.unwrap().lock().await.revoke(self.clone()).await.unwrap();
                 }
                 CmdType::RequestCreate => todo!(),
                 CmdType::RequestInvoke => {

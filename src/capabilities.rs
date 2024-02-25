@@ -192,7 +192,7 @@ pub mod tcap {
                     .send(SendRequest::new(delegatee.into(), packet.clone()), false)
                     .await;
             }
-
+            s.cap_table.remove(self.cap_id).await;
             Ok(())
         }
 
