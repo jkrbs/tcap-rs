@@ -51,7 +51,7 @@ pub mod tcap {
         delegatees: Arc<Mutex<Vec<IpAddress>>>,
         request_object: Option<Arc<Mutex<RequestObject>>>,
         memory_object: Option<Arc<Mutex<MemoryObject>>>,
-        pub service: Option<Arc<Mutex<Service>>>
+        pub service: Option<Arc<Service>>
     }
 
     impl From<InsertCapHeader> for Capability {
@@ -75,11 +75,11 @@ pub mod tcap {
     }
 
     impl Capability {
-        pub(crate) async fn create(s: Arc<Mutex<Service>>) -> Capability {
+        pub(crate) async fn create(s: Arc<Service>) -> Capability {
             let mut rng = rand::thread_rng();
             let cap_id = rng.gen::<CapID>();
 
-            let owner_address = IpAddress::from(s.lock().await.config.address.as_str());
+            let owner_address = IpAddress::from(s.config.address.as_str());
 
             Capability {
                 cap_id,
@@ -92,8 +92,8 @@ pub mod tcap {
             }
         }
 
-        pub(crate) async fn create_with_id(s: Arc<Mutex<Service>>, cap_id: CapID) -> Capability {
-            let owner_address = IpAddress::from(s.lock().await.config.address.as_str());
+        pub(crate) async fn create_with_id(s: Arc<Service>, cap_id: CapID) -> Capability {
+            let owner_address = IpAddress::from(s.config.address.as_str());
             Capability {
                 cap_id,
                 cap_type: CapType::None,
@@ -105,7 +105,7 @@ pub mod tcap {
             }
         }
 
-        pub(crate) async fn create_remote_with_id(s: Arc<Mutex<Service>>, owner_address: IpAddress,cap_id: CapID) -> Capability {
+        pub(crate) async fn create_remote_with_id(s: Arc<Service>, owner_address: IpAddress,cap_id: CapID) -> Capability {
             Capability {
                 cap_id,
                 cap_type: CapType::None,
@@ -151,7 +151,7 @@ pub mod tcap {
             delegatee: IpAddress,
         ) -> Result<(), tokio::io::Error> {
             self.delegatees.lock().await.push(delegatee);
-            let address = self.service.as_ref().unwrap().lock().await.config.address.clone();
+            let address = self.service.as_ref().unwrap().config.address.clone();
             let packet: Box<[u8; std::mem::size_of::<InsertCapHeader>()]> =
                 InsertCapHeader::construct(&self, delegatee, IpAddress::from(address.as_str()))
                     .into();
@@ -159,12 +159,12 @@ pub mod tcap {
 
             #[cfg(feature="directCPcommunication")]
             {
-                let ctrl_plane = self.service.as_ref().unwrap().lock().await.config.switch_addr.clone();
-                let _ = self.service.as_ref().unwrap().lock().await.send(SendRequest::new(ctrl_plane, packet.clone()), false).await;    
+                let ctrl_plane = self.service.as_ref().unwrap().config.switch_addr.clone();
+                let _ = self.service.as_ref().unwrap().send(SendRequest::new(ctrl_plane, packet.clone()), false).await;    
             }
             
             let dest: String = delegatee.into();
-            let _ = self.service.as_ref().unwrap().lock().await.send(SendRequest::new(dest, packet), false).await;
+            let _ = self.service.as_ref().unwrap().send(SendRequest::new(dest, packet), false).await;
             
             Ok(())
         }
@@ -181,7 +181,7 @@ pub mod tcap {
 
             #[cfg(feature="directCPcommunication")]
             {
-                let ctrl_plane = self.service.as_ref().unwrap().lock().await.config.switch_addr.clone();
+                let ctrl_plane = self.service.as_ref().unwrap().config.switch_addr.clone();
                 let _ = s
                     .send(SendRequest::new(ctrl_plane, packet.clone()), false)
                     .await;
@@ -204,7 +204,7 @@ pub mod tcap {
 
             #[cfg(feature="directCPcommunication")]
             {
-                let ctrl_plane = self.service.as_ref().unwrap().lock().await.config.switch_addr.clone();
+                let ctrl_plane = self.service.as_ref().unwrap().config.switch_addr.clone();
                 let _ = s
                     .send(SendRequest::new(ctrl_plane, packet.clone()), false)
                     .await;
@@ -240,13 +240,18 @@ pub mod tcap {
             let mut flags = Flags::empty();
             flags.set(Flags::REQUIRE_RESPONSE, wait);
 
-            let packet: Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]> =
-            RequestInvokeHeader::construct(self.clone(), continuations.len() as u8, cont_ids, flags).into();
+            let (stream_id, p) = RequestInvokeHeader::construct(self.clone(), continuations.len() as u8, cont_ids, flags);
+            let packet: Box<[u8; std::mem::size_of::<RequestInvokeHeader>()]> = p.into();
+            
 
-            let resp = self.service.as_ref().unwrap().lock().await
+            let notifier = self.service.as_ref().unwrap()
                 .send(SendRequest::new(self.owner_address.into(), packet), wait)
                 .await;
             if wait {
+                debug!("Waiting for Response");
+                notifier.unwrap().notified().await;
+                debug!("Notified of response");
+                let resp = self.service.as_ref().unwrap().get_response(stream_id).await;
                 debug!("Packet type is {:?}", CmdType::from(* bytemuck::from_bytes::<u32>(&resp.as_ref().unwrap().data[12..16])));
                 if CmdType::from(* bytemuck::from_bytes::<u32>(&resp.as_ref().unwrap().data[12..16])) != CmdType::RequestResponse {
                     return Err(());
@@ -285,15 +290,18 @@ pub mod tcap {
                     self.memory_object.as_ref().unwrap().clone()
                 }
                 false => {
-                    let data: Box<[u8; std::mem::size_of::<MemoryCopyRequestHeader>()]> = MemoryCopyRequestHeader::construct(self.cap_id).into();
+                    let (stream_id, data) = MemoryCopyRequestHeader::construct(self.cap_id);
+                    let data: Box<[u8; std::mem::size_of::<MemoryCopyRequestHeader>()]> = data.into();
 
                     let req = SendRequest::new(self.owner_address.into(), data);
 
-                    match self.service.as_ref().unwrap().lock().await.send(req, true).await {
+                    match self.service.as_ref().unwrap().send(req, true).await {
                         None => {
                             panic!("Response to MemoryCopy Request should not be None");
                         }
-                        Some(resp) => {
+                        Some(notifier) => {
+                            notifier.notified().await;
+                            let resp = self.service.as_ref().unwrap().get_response(stream_id).await.unwrap();
                             let resp = MemoryCopyResponseHeader::from(resp.data);
                             self.memory_object = Some(Arc::new(Mutex::new(MemoryObject::from(resp))));
                             self.memory_object.as_ref().unwrap().clone()

@@ -244,11 +244,11 @@ pub mod tcap {
     }
 
     impl RequestInvokeHeader {
-        pub(crate) fn construct(cap: Capability, number_of_conts: u8, continutaion_cap_ids: [CapID; 4], flags: Flags) -> RequestInvokeHeader {
+        pub(crate) fn construct(cap: Capability, number_of_conts: u8, continutaion_cap_ids: [CapID; 4], flags: Flags) -> (u32, RequestInvokeHeader) {
             let mut rng = rand::thread_rng();
             let stream_id = rand::Rng::gen::<u32>(&mut rng);
 
-            RequestInvokeHeader {
+            (stream_id, RequestInvokeHeader {
                 common: CommonHeader {
                     size: std::mem::size_of::<RequestInvokeHeader>()
                         .try_into()
@@ -260,7 +260,7 @@ pub mod tcap {
                 number_of_conts,
                 continutaion_cap_ids,
                 flags: flags.bits()
-            }
+            })
         }
     }
 
@@ -593,18 +593,18 @@ pub mod tcap {
         }
     }
     impl MemoryCopyRequestHeader {
-        pub fn construct(cap_id: CapID) -> MemoryCopyRequestHeader {
+        pub fn construct(cap_id: CapID) -> (u32, MemoryCopyRequestHeader) {
             let mut rng = rand::thread_rng();
             let stream_id = rand::Rng::gen::<u32>(&mut rng);
 
-            MemoryCopyRequestHeader {
+            (stream_id, MemoryCopyRequestHeader {
                 common: CommonHeader {
                     size: std::mem::size_of::<MemoryCopyRequestHeader>() as u64,
                     cmd: CmdType::MemoryCopy as u32,
                     stream_id,
                     cap_id: cap_id,
                 }
-            }
+            })
         }
     }
 

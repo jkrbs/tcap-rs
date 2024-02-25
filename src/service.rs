@@ -121,7 +121,7 @@ pub mod tcap {
 
         pub async fn create_capability(&self) -> Arc<Mutex<Capability>> {
             let c = Arc::new(Mutex::new(
-                Capability::create(Arc::new(Mutex::new(self.clone()))).await,
+                Capability::create(Arc::new(self.clone())).await,
             ));
 
             self.cap_table.insert(c.clone()).await;
@@ -139,7 +139,7 @@ pub mod tcap {
          */
         pub async fn create_capability_with_id(&self, cap_id: CapID) -> Arc<Mutex<Capability>> {
             let c = Arc::new(Mutex::new(
-                Capability::create_with_id(Arc::new(Mutex::new(self.clone())), cap_id).await,
+                Capability::create_with_id(Arc::new(self.clone()), cap_id).await,
             ));
 
             self.cap_table.insert(c.clone()).await;
@@ -150,7 +150,7 @@ pub mod tcap {
         pub async fn create_remote_capability_with_id(&self, owner: String, cap_id: CapID) -> Arc<Mutex<Capability>> {
             let owner_address = IpAddress::from(owner.as_str());
             let c = Arc::new(Mutex::new(
-                Capability::create_remote_with_id(Arc::new(Mutex::new(self.clone())), owner_address, cap_id).await,
+                Capability::create_remote_with_id(Arc::new(self.clone()), owner_address, cap_id).await,
             ));
 
             self.cap_table.insert(c.clone()).await;
@@ -183,6 +183,7 @@ pub mod tcap {
             let sender_handle = tokio::spawn(async move {
                 debug!("started sender thread");
                 loop {
+                    debug!("receive next packet from send queue");
                     let packet = s.receiver.clone().lock().await.recv().await;
                     if let Some(packet) = packet {
                         s.response_notifiers
@@ -191,7 +192,7 @@ pub mod tcap {
                             .insert(packet.stream_id, packet.response_notification.clone());
 
                         match s.socket.send_to(&packet.data, packet.dest.clone()).await {
-                            Ok(b) => debug!("sent {:?} bytes", b),
+                            Ok(b) => debug!("sent stream id {:?}", packet.stream_id),
                             Err(_) => panic!("failed to send network packet to {:?}", packet.dest),
                         };
                         #[cfg(feature="net-stats")]
@@ -205,6 +206,7 @@ pub mod tcap {
             //receive loop
             let s = self.clone();
             let receiver_handle = tokio::spawn(async move {
+                debug!("Start receiver Thread");
                 loop {
                     let mut buf = Vec::with_capacity(2048);
 
@@ -269,7 +271,7 @@ pub mod tcap {
             Ok(())
         }
 
-        pub async fn send(&self, r: SendRequest, wait_for_response: bool) -> Option<Response> {
+        pub(crate) async fn send(&self, r: SendRequest, wait_for_response: bool) -> Option<Arc<Notify>> {
             let stream_id = r.stream_id;
             let notification = r.response_notification.clone();
             debug!(
@@ -279,11 +281,14 @@ pub mod tcap {
             let _ = self.send_channel.clone().lock().await.send(r).await;
 
             if wait_for_response {
-                debug!("Waiting for Response");
-                notification.clone().notified().await;
-                return self.responses.lock().await.remove(&stream_id);
+                return Some(notification.clone());
             }
             None
+        }
+
+
+        pub(crate) async fn get_response(&self, stream_id: u32) -> Option<Response> {
+            self.responses.lock().await.remove(&stream_id)
         }
 
         async fn parse(&self, source: String, packet: Vec<u8>, common: CommonHeader) {
@@ -383,7 +388,7 @@ pub mod tcap {
                     let hdr = InsertCapHeader::from(packet);
                     debug!("Received CapInsert: {:?}", hdr);
                     let cap = Arc::new(Mutex::new(Capability::from(hdr)));
-                    cap.lock().await.service = Some(Arc::new(Mutex::new(self.clone())));
+                    cap.lock().await.service = Some(Arc::new(self.clone()));
                     let _ = self    
                         .cap_table
                         .insert(cap)
