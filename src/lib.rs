@@ -6,6 +6,8 @@ pub mod object;
 pub mod service;
 pub mod config;
 
+pub(crate) const MEMCOPY_BUFFER_SIZE: usize = 1024;
+
 // export objects in crate base mod
 #[allow(unused_imports)]
 use config::Config;

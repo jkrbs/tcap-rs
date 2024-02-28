@@ -19,7 +19,7 @@ pub mod tcap {
         receiver: Arc<Mutex<mpsc::Receiver<SendRequest>>>,
         pub(crate) config: Config,
         socket: Arc<UdpSocket>,
-        responses: Arc<Mutex<HashMap<u32, Response>>>,
+        pub(crate) responses: Arc<Mutex<HashMap<u32, Response>>>,
         response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>,
         pub(crate) cap_table: CapTable,
         termination_notifier: Arc<Notify>,
@@ -192,7 +192,7 @@ pub mod tcap {
                             .insert(packet.stream_id, packet.response_notification.clone());
 
                         match s.socket.send_to(&packet.data, packet.dest.clone()).await {
-                            Ok(b) => debug!("sent stream id {:?}", packet.stream_id),
+                            Ok(b) => debug!("sent stream id {:?}, size: {:?}", packet.stream_id, b),
                             Err(_) => panic!("failed to send network packet to {:?}", packet.dest),
                         };
                         #[cfg(feature="net-stats")]
@@ -237,6 +237,16 @@ pub mod tcap {
 
                             match ss.response_notifiers.lock().await.get(&stream_id) {
                                 Some(notifier) => {
+                                    if CmdType::from(common.cmd) == CmdType::MemoryCopyResponse{
+                                        let hdr = MemoryCopyResponseHeader::from(buf.clone());
+                                        ss.responses.lock().await.insert(
+                                            stream_id + hdr.sequence,
+                                            Response {
+                                                sender: sender.to_string(),
+                                                data: buf,
+                                            },
+                                        );
+                                    } else {
                                     ss.responses.lock().await.insert(
                                         stream_id,
                                         Response {
@@ -244,6 +254,7 @@ pub mod tcap {
                                             data: buf,
                                         },
                                     );
+                                }
                                     notifier.notify_one();
                                     debug!("notified stream id {:?}", stream_id);
                                 }
@@ -424,19 +435,24 @@ pub mod tcap {
                         panic!("someone ties to capy memory from a non-memory type capability");
                     }
 
-                    let resp: Box<[u8; std::mem::size_of::<MemoryCopyResponseHeader>()]> = MemoryCopyResponseHeader::construct(cap.lock().await.get_buffer().await, hdr.common.cap_id, hdr.common.stream_id).await.into();
+                    let packets = MemoryCopyResponseHeader::construct(cap.lock().await.get_buffer().await, hdr.common.cap_id, hdr.common.stream_id).await;
+                    for packet in packets {
+                        let resp: Box<[u8; std::mem::size_of::<MemoryCopyResponseHeader>()]> = packet.into();
 
-                    debug!("Sent Response packet {:?} to {:?}", packet, source);
-                    let _ = self
-                        .send(SendRequest::new(source, resp), false)
-                        .await;
+                        debug!("Sent Response packet {:?} to {:?}", packet, source.clone());
+                        let _ = self
+                            .send(SendRequest::new(source.clone(), resp), false)
+                            .await;
+                    }
                 },
                 CmdType::MemoryCopyResponse => {
                     debug!("Received MemoryCopyResponse");
-                    let hdr = MemoryCopyRequestHeader::from(packet.clone());
+                    let hdr = MemoryCopyResponseHeader::from(packet.clone());
                     let streamid = hdr.common.stream_id;
-                    self.responses.lock().await.insert(streamid, Response { sender: "".to_string(), data: packet });
-                    self.response_notifiers.lock().await.get(&streamid).unwrap().notify_waiters();
+
+                    // TODO (@jkrbs): fix sequence and stream id mangling. This is an ungly hack
+                    self.responses.lock().await.insert(streamid+hdr.sequence, Response { sender: source.clone(), data: packet });
+                    self.response_notifiers.lock().await.get(&streamid).unwrap().notify_one();
                 },
                 _ => {
                     warn!("Unrecognized CMDType received");

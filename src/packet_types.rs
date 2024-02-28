@@ -1,11 +1,8 @@
 pub mod tcap {
-    use crate::{capabilities::tcap::{Capability, CapID}, object::tcap::object::MemoryObject};
+    use crate::{MEMCOPY_BUFFER_SIZE, capabilities::tcap::{Capability, CapID}, object::tcap::object::MemoryObject};
     use bytemuck::*;
     use tokio::sync::Mutex;
-    use std::{
-        net::{Ipv4Addr, SocketAddrV4},
-        str::FromStr, sync::Arc
-    };
+    use std::{net::{Ipv4Addr, SocketAddrV4}, str::FromStr, sync::Arc};
     use bitflags::bitflags;
 
     #[repr(C)]
@@ -613,7 +610,9 @@ pub mod tcap {
     pub(crate) struct MemoryCopyResponseHeader {
         pub(crate) common: CommonHeader,
         pub(crate) size: u64,
-        pub(crate) buffer: [u8;1024]
+        pub(crate) buf_size: u64,
+        pub(crate) sequence: u32,
+        pub(crate) buffer: [u8; MEMCOPY_BUFFER_SIZE]
     }
 
     impl From<Vec<u8>> for MemoryCopyResponseHeader {
@@ -630,25 +629,62 @@ pub mod tcap {
         }
     }
     impl MemoryCopyResponseHeader {
-        pub(crate) async fn construct(obj: Arc<Mutex<MemoryObject>>, cap_id: CapID, stream_id: u32) -> MemoryCopyResponseHeader {
-            let size = obj.lock().await.size.clone();
+        pub(crate) async fn construct(obj: Arc<Mutex<MemoryObject>>, cap_id: CapID, stream_id: u32) -> Vec<MemoryCopyResponseHeader> {
             let buffer = obj.lock().await.data.clone();
 
-            MemoryCopyResponseHeader {
-                common: CommonHeader {
-                    size: std::mem::size_of::<MemoryCopyResponseHeader>() as u64,
-                    cmd: CmdType::MemoryCopyResponse as u32,
-                    stream_id,
-                    cap_id,
-                },
-               size, buffer
+            let mut sequence: u32 = 1;
+            let mut packets: Vec<MemoryCopyResponseHeader> = vec![]; 
+            let mut rest: &[u8] = buffer.as_slice();
+            let mut to_transfer = rest.len() as i64;
+            while to_transfer > 0 {
+                match rest.split_first_chunk::<MEMCOPY_BUFFER_SIZE>() {
+                    Some ((chunk, buf)) => {
+                        rest = buf;
+                        packets.push(MemoryCopyResponseHeader {
+                            common: CommonHeader {
+                                size: std::mem::size_of::<MemoryCopyResponseHeader>() as u64,
+                                cmd: CmdType::MemoryCopyResponse as u32,
+                                stream_id,
+                                cap_id,
+                            },
+                        size: chunk.len() as u64, sequence,
+                        buf_size: buffer.len()  as u64,
+                        buffer: *chunk
+                        });
+
+                    }
+                    None => {
+                        let mut buf = [0 as u8;1024];
+                        buf[..rest.len()].copy_from_slice(rest);
+                        packets.push(MemoryCopyResponseHeader {
+                            common: CommonHeader {
+                                size: std::mem::size_of::<MemoryCopyResponseHeader>() as u64,
+                                cmd: CmdType::MemoryCopyResponse as u32,
+                                stream_id,
+                                cap_id,
+                            },
+                            buf_size: buffer.len() as u64,
+                        size: buf.len() as u64, sequence,
+                        buffer: buf
+                        });
+                    },
+                };
+                sequence += 1;
+                to_transfer -= MEMCOPY_BUFFER_SIZE as i64;
             }
+
+            packets
         }
     }
 
     mod tests {
+        use crate::{capabilities::tcap::CapID, object::tcap::object::MemoryObject, MEMCOPY_BUFFER_SIZE};
         #[allow(unused_imports)] // Not sure, why the import is detected as unused.
         use crate::packet_types::tcap::IpAddress;
+
+        use super::MemoryCopyResponseHeader;
+        use tokio::sync::Mutex;
+        use std::sync::Arc;
 
         #[test]
         fn test_create_ip_addr_object_from_string() {
@@ -664,6 +700,35 @@ pub mod tcap {
             assert!(obj.port == 0);
             assert!(obj.address == [10, 0, 0, 1]);
             assert!(obj.netmask == [255, 255, 255, 0]);
+        }
+
+        #[tokio::test]
+        async fn test_mempacket_construction() {
+            const BUF_SIZE: usize = 3000;
+            const CAP_ID: CapID = 1234;
+            const STREAM_ID: u32 = 98232;
+
+            let buffer = Vec::from([0 as u8;BUF_SIZE]);
+            let object = Arc::new(Mutex::new(MemoryObject::new(buffer).await));
+
+            let packets = MemoryCopyResponseHeader::construct(object.clone(), CAP_ID, STREAM_ID).await;
+
+            assert!(packets.len() == BUF_SIZE.div_ceil(MEMCOPY_BUFFER_SIZE), "number of packets must be ceil(buf_size/copy_buffer_size) packet len is {:?}", packets.len());
+
+            let mut cur_sequence = 1;
+            for packet in packets {
+                assert!(packet.common.cap_id == CAP_ID, "cap id must be the same for every packet");
+                assert!(packet.common.stream_id == STREAM_ID, "stream id must be the same for every packet");
+                assert!(packet.sequence == cur_sequence, "sequence number must be correct");
+                assert!(packet.buf_size == BUF_SIZE as u64, "complete buf size must be correct");
+                
+                for i in 0..MEMCOPY_BUFFER_SIZE {
+                    let index = i + packet.size.min(MEMCOPY_BUFFER_SIZE as u64 * (cur_sequence -1)) as usize;
+                    assert!(packet.buffer[i] == object.lock().await.data[index], "buffer mismatch");
+                }
+
+                cur_sequence += 1;
+            }
         }
     }
 }

@@ -301,9 +301,31 @@ pub mod tcap {
                         }
                         Some(notifier) => {
                             notifier.notified().await;
-                            let resp = self.service.as_ref().unwrap().get_response(stream_id).await.unwrap();
+
+                            // first packet has sequence ID one
+                            let mut sequence = 1;
+                            debug!("get stream_id resp {:?}, currently avalable: {:?}", sequence+stream_id, self.service.as_ref().unwrap().responses.lock().await.keys());
+                            let resp = self.service.as_ref().unwrap().get_response(stream_id + sequence).await.unwrap();
                             let resp = MemoryCopyResponseHeader::from(resp.data);
                             self.memory_object = Some(Arc::new(Mutex::new(MemoryObject::from(resp))));
+                            
+                            // wait for all packets to be in response buffers
+                            let num_packets = resp.buf_size.div_ceil(resp.size);
+                            //first packet already arrived
+                            debug!("waiting for {:?} packets to arrive", num_packets-1);
+                            for _ in 0..num_packets-1 {
+                                notifier.notified().await;
+                            }
+
+
+                            //extract all packets from response buffers
+                            while self.memory_object.as_ref().unwrap().lock().await.size != resp.buf_size {
+                                sequence += 1;
+                                let resp = self.service.as_ref().unwrap().get_response(stream_id + sequence).await.unwrap();
+                                let resp = MemoryCopyResponseHeader::from(resp.data);
+                                self.memory_object.as_ref().unwrap().lock().await.append(resp);
+                            }
+
                             self.memory_object.as_ref().unwrap().clone()
                         }
                     }

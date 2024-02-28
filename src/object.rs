@@ -3,7 +3,7 @@ pub mod tcap {
         use core::fmt;
         use log::debug;
         use tokio::sync::Mutex;
-        use std::{cmp::min, sync::Arc};
+        use std::sync::Arc;
 
         //TODO (@jkrbs): Refactor into Object Trait and multiple object types for Memory and Requests at least
         use crate::{capabilities::tcap::Capability, packet_types::tcap::MemoryCopyResponseHeader};
@@ -62,7 +62,7 @@ pub mod tcap {
             is_local: bool,
             pub(crate) cap: Option<Capability>,
             pub(crate) size: u64,
-            pub(crate) data: [u8;1024]
+            pub(crate) data: Vec<u8>
         }
         
         impl From<MemoryCopyResponseHeader> for MemoryObject {
@@ -70,7 +70,7 @@ pub mod tcap {
                 MemoryObject {
                     is_local: true,
                     size: value.size,
-                    data: value.buffer,
+                    data: value.buffer.to_vec(),
                     cap: None
                 }
             }
@@ -87,20 +87,14 @@ pub mod tcap {
 
         impl MemoryObject {
             pub async fn new(
-                buf: &[u8],
+                data: Vec<u8>,
             ) -> MemoryObject {
-                if buf.len() > 1024 {
-                    panic!("Currently only 1KiB Memory Regions are supported")
-                }
-
-                let mut data: [u8; 1024] = [0;1024];
-                let size = 1024.min(buf.len());
-                data[0..size].clone_from_slice(buf);
+                let size: u64 = data.len() as u64;
 
                 MemoryObject {
                     is_local: true,
                     cap: None,
-                    size: size as u64,
+                    size: size,
                     data
                 }
             }
@@ -109,12 +103,19 @@ pub mod tcap {
                 self.is_local
             }
 
-            pub fn set_cap(&mut self, c: Capability) {
+            pub(crate) fn set_cap(&mut self, c: Capability) {
                 self.cap = Some(c);
             }
 
             pub fn data(&self) -> Vec<u8> {
-                Vec::from(self.data).drain(min(1024, self.size as usize)..).collect()
+                self.data.clone()
+            }
+
+            pub(crate) fn append(&mut self, value: MemoryCopyResponseHeader) {
+                //TODO (@jkrbs): Check if cap is correct and all other field match
+                let extend = &value.buffer[..value.size as usize];
+                self.data.extend(extend);
+                self.size += value.size;
             }
         }
     }
