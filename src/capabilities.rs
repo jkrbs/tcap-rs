@@ -317,7 +317,7 @@ pub mod tcap {
                                 notifier.notified().await;
                             }
 
-
+                            let stream_id = stream_id - resp.sequence;
                             //extract all packets from response buffers
                             while self.memory_object.as_ref().unwrap().lock().await.size != resp.buf_size {
                                 sequence += 1;
