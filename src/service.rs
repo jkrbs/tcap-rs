@@ -10,7 +10,7 @@ pub mod tcap {
     use crate::config::Config;
     use log::{debug, error, info, warn};
     use tokio::net::UdpSocket;
-    use tokio::sync::{mpsc, Mutex, Notify};
+    use tokio::sync::{mpsc, Mutex, Notify, Semaphore};
     use core::fmt;
     
     #[derive(Clone)]
@@ -20,7 +20,7 @@ pub mod tcap {
         pub(crate) config: Config,
         socket: Arc<UdpSocket>,
         pub(crate) responses: Arc<Mutex<HashMap<u32, Response>>>,
-        response_notifiers: Arc<Mutex<HashMap<u32, Arc<Notify>>>>,
+        response_notifiers: Arc<Mutex<HashMap<u32, Arc<Semaphore>>>>,
         pub(crate) cap_table: CapTable,
         termination_notifier: Arc<Notify>,
         #[cfg(feature="net-stats")]
@@ -42,7 +42,7 @@ pub mod tcap {
         pub dest: String,
         pub data: Box<[u8]>,
         pub stream_id: u32,
-        response_notification: Arc<Notify>
+        response_notification: Arc<Semaphore>
     }
 
     impl SendRequest {
@@ -57,7 +57,7 @@ pub mod tcap {
                 data
             );
             let stream_id = CommonHeader::from(data[0..std::mem::size_of::<CommonHeader>()].to_vec()).stream_id;
-            let response_notification = Arc::new(Notify::new());
+            let response_notification = Arc::new(Semaphore::new(0));
             Self {
                 dest,
                 data,
@@ -255,7 +255,7 @@ pub mod tcap {
                                         },
                                     );
                                 }
-                                    notifier.notify_one();
+                                    notifier.add_permits(1);
                                     debug!("notified stream id {:?}", stream_id);
                                 }
                                 None => {
@@ -282,7 +282,7 @@ pub mod tcap {
             Ok(())
         }
 
-        pub(crate) async fn send(&self, r: SendRequest, wait_for_response: bool) -> Option<Arc<Notify>> {
+        pub(crate) async fn send(&self, r: SendRequest, wait_for_response: bool) -> Option<Arc<Semaphore>> {
             let stream_id = r.stream_id;
             let notification = r.response_notification.clone();
             debug!(
@@ -409,8 +409,8 @@ pub mod tcap {
                     debug!("Received Request Response");
                     let hdr = RequestResponseHeader::from(packet.clone());
                     let streamid = hdr.common.stream_id;
-                    self.responses.lock().await.insert(streamid, Response { sender: "".to_string(), data: packet });
-                    self.response_notifiers.lock().await.get(&streamid).unwrap().notify_waiters();
+                    self.responses.lock().await.insert(streamid, Response { sender: source, data: packet });
+                    self.response_notifiers.lock().await.get(&streamid).unwrap().add_permits(1);
                 },
                 CmdType::MemoryCopy => {
                     debug!("Received MemoryCopy");
@@ -452,7 +452,7 @@ pub mod tcap {
 
                     // TODO (@jkrbs): fix sequence and stream id mangling. This is an ungly hack
                     self.responses.lock().await.insert(streamid+hdr.sequence, Response { sender: source.clone(), data: packet });
-                    self.response_notifiers.lock().await.get(&streamid).unwrap().notify_one();
+                    self.response_notifiers.lock().await.get(&streamid).unwrap().add_permits(1);
                 },
                 _ => {
                     warn!("Unrecognized CMDType received");

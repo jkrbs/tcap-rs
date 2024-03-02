@@ -249,7 +249,7 @@ pub mod tcap {
                 .await;
             if wait {
                 debug!("Waiting for Response");
-                notifier.unwrap().notified().await;
+                let _ = notifier.unwrap().acquire().await.unwrap();
                 debug!("Notified of response");
                 let resp = self.service.as_ref().unwrap().get_response(stream_id).await;
                 debug!("Packet type is {:?}", CmdType::from(* bytemuck::from_bytes::<u32>(&resp.as_ref().unwrap().data[12..16])));
@@ -300,7 +300,7 @@ pub mod tcap {
                             panic!("Response to MemoryCopy Request should not be None");
                         }
                         Some(notifier) => {
-                            notifier.notified().await;
+                            let _ = notifier.acquire().await.unwrap();
 
                             // first packet has sequence ID one
                             let mut sequence = 1;
@@ -312,18 +312,16 @@ pub mod tcap {
                             // wait for all packets to be in response buffers
                             let num_packets = resp.buf_size.div_ceil(resp.size);
                             //first packet already arrived
-                            debug!("waiting for {:?} packets to arrive", num_packets-1);
-                            for _ in 0..num_packets-1 {
-                                notifier.notified().await;
-                            }
+                            let _  = notifier.acquire_many((num_packets-1) as u32).await.unwrap();
 
                             let stream_id = stream_id - resp.sequence;
                             //extract all packets from response buffers
                             while self.memory_object.as_ref().unwrap().lock().await.size != resp.buf_size {
-                                sequence += 1;
-                                let resp = self.service.as_ref().unwrap().get_response(stream_id + sequence).await.unwrap();
-                                let resp = MemoryCopyResponseHeader::from(resp.data);
-                                self.memory_object.as_ref().unwrap().lock().await.append(resp);
+                                if let Some(resp) = self.service.as_ref().unwrap().get_response(stream_id + sequence).await {
+                                    let resp = MemoryCopyResponseHeader::from(resp.data);
+                                    self.memory_object.as_ref().unwrap().lock().await.append(resp);
+                                    sequence += 1;
+                                }
                             }
 
                             self.memory_object.as_ref().unwrap().clone()
