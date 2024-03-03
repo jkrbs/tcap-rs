@@ -678,14 +678,12 @@ pub mod tcap {
     }
 
     mod tests {
-        use crate::{capabilities::tcap::CapID, object::tcap::object::MemoryObject, MEMCOPY_BUFFER_SIZE};
-        #[allow(unused_imports)] // Not sure, why the import is detected as unused.
+        #![allow(unused_imports)] // Not sure, why the import is detected as unused.
         use crate::packet_types::tcap::IpAddress;
-
         use super::MemoryCopyResponseHeader;
         use tokio::sync::Mutex;
         use std::sync::Arc;
-
+        use crate::{capabilities::tcap::CapID, object::tcap::object::MemoryObject, MEMCOPY_BUFFER_SIZE};
         #[test]
         fn test_create_ip_addr_object_from_string() {
             let obj = IpAddress::from("10.0.0.1:1234");
