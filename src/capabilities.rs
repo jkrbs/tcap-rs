@@ -305,7 +305,10 @@ pub mod tcap {
                             // first packet has sequence ID one
                             let mut sequence = 1;
                             debug!("get stream_id resp {:?}, currently avalable: {:?}", sequence+stream_id, self.service.as_ref().unwrap().responses.lock().await.keys());
-                            let resp = self.service.as_ref().unwrap().get_response(stream_id + sequence).await.unwrap();
+                            while ! self.service.as_ref().unwrap().responses.lock().await.contains_key(&(stream_id + 1)) {
+                               tokio::time::sleep(std::time::Duration::from_nanos(10)).await; 
+                            }
+                            let resp = self.service.as_ref().unwrap().get_response_no_delete(stream_id + sequence).await.unwrap();
                             let resp = MemoryCopyResponseHeader::from(resp.data);
                             self.memory_object = Some(Arc::new(Mutex::new(MemoryObject::from(resp))));
                             
@@ -313,14 +316,19 @@ pub mod tcap {
                             let num_packets = resp.buf_size.div_ceil(resp.size);
                             //first packet already arrived
                             let _  = notifier.acquire_many((num_packets-1) as u32).await.unwrap();
-
                             let stream_id = stream_id - resp.sequence;
+                            debug!("all notifiers triggered");
+                            let buf_size =  resp.buf_size;
+                            debug!("get stream_id resp {:?}, currently avalable: {:?}, buf_size {:?}", sequence+stream_id, self.service.as_ref().unwrap().responses.lock().await.keys(), buf_size);
                             //extract all packets from response buffers
                             while self.memory_object.as_ref().unwrap().lock().await.size != resp.buf_size {
+                                sequence += 1;
                                 if let Some(resp) = self.service.as_ref().unwrap().get_response(stream_id + sequence).await {
                                     let resp = MemoryCopyResponseHeader::from(resp.data);
+                                    let seq =  resp.sequence;
                                     self.memory_object.as_ref().unwrap().lock().await.append(resp);
-                                    sequence += 1;
+                                } else {
+                                    panic!("packet missing in memcpy buffer constructor. Trying to access {:?}", stream_id + sequence)
                                 }
                             }
 

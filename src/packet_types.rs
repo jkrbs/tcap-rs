@@ -654,7 +654,7 @@ pub mod tcap {
 
                     }
                     None => {
-                        let mut buf = [0 as u8;1024];
+                        let mut buf = [0 as u8; MEMCOPY_BUFFER_SIZE];
                         buf[..rest.len()].copy_from_slice(rest);
                         packets.push(MemoryCopyResponseHeader {
                             common: CommonHeader {
