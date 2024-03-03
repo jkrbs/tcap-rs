@@ -51,11 +51,6 @@ pub mod tcap {
                 data.len() >= std::mem::size_of::<CommonHeader>(),
                 "Packet must at keast contain the common header"
             );
-            debug!(
-                "Extracting stream ID from data of len: {:?}, raw: {:?}",
-                data.len(),
-                data
-            );
             let stream_id = CommonHeader::from(data[0..std::mem::size_of::<CommonHeader>()].to_vec()).stream_id;
             let response_notification = Arc::new(Semaphore::new(0));
             Self {
@@ -286,8 +281,8 @@ pub mod tcap {
             let stream_id = r.stream_id;
             let notification = r.response_notification.clone();
             debug!(
-                "sending Request: {:?}, stream_id: {:?} via mpsc",
-                r.stream_id, stream_id
+                "sending Request: {:?} via mpsc",
+                r.stream_id,
             );
             let _ = self.send_channel.clone().lock().await.send(r).await;
 
@@ -300,6 +295,10 @@ pub mod tcap {
 
         pub(crate) async fn get_response(&self, stream_id: u32) -> Option<Response> {
             self.responses.lock().await.remove(&stream_id)
+        }
+
+        pub(crate) async fn get_response_no_delete(&self, stream_id: u32) -> Option<Response> {
+            self.responses.lock().await.get(&stream_id).cloned()
         }
 
         async fn parse(&self, source: String, packet: Vec<u8>, common: CommonHeader) {
@@ -386,7 +385,7 @@ pub mod tcap {
                                 .into()
                         }
                     };
-                    debug!("Sent Response packet {:?} to {:?}", packet, source);
+                    debug!("Sent Response packet to {:?}", source);
                     let _ = self
                         .send(SendRequest::new(source, packet), false)
                         .await;
@@ -439,7 +438,7 @@ pub mod tcap {
                     for packet in packets {
                         let resp: Box<[u8; std::mem::size_of::<MemoryCopyResponseHeader>()]> = packet.into();
 
-                        debug!("Sent Response packet {:?} to {:?}", packet, source.clone());
+                        debug!("Sent Response packet to {:?}", source.clone());
                         let _ = self
                             .send(SendRequest::new(source.clone(), resp), false)
                             .await;
