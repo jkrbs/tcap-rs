@@ -325,7 +325,7 @@ pub mod tcap {
                                 sequence += 1;
                                 if let Some(resp) = self.service.as_ref().unwrap().get_response(stream_id + sequence).await {
                                     let resp = MemoryCopyResponseHeader::from(resp.data);
-                                    let seq =  resp.sequence;
+
                                     self.memory_object.as_ref().unwrap().lock().await.append(resp);
                                 } else {
                                     panic!("packet missing in memcpy buffer constructor. Trying to access {:?}", stream_id + sequence)

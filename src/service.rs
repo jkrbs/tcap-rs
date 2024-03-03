@@ -278,7 +278,6 @@ pub mod tcap {
         }
 
         pub(crate) async fn send(&self, r: SendRequest, wait_for_response: bool) -> Option<Arc<Semaphore>> {
-            let stream_id = r.stream_id;
             let notification = r.response_notification.clone();
             debug!(
                 "sending Request: {:?} via mpsc",
