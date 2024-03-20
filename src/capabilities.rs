@@ -315,20 +315,24 @@ pub mod tcap {
                             // wait for all packets to be in response buffers
                             let num_packets = resp.buf_size.div_ceil(resp.size);
                             //first packet already arrived
-                            let _  = notifier.acquire_many((num_packets-1) as u32).await.unwrap();
+                            if num_packets > 1 {
+                                let _  = notifier.acquire_many((num_packets-1) as u32).await.unwrap();
+                            }
+
                             let stream_id = stream_id - resp.sequence;
                             debug!("all notifiers triggered");
                             let buf_size =  resp.buf_size;
                             debug!("get stream_id resp {:?}, currently avalable: {:?}, buf_size {:?}", sequence+stream_id, self.service.as_ref().unwrap().responses.lock().await.keys(), buf_size);
                             //extract all packets from response buffers
-                            while self.memory_object.as_ref().unwrap().lock().await.size != resp.buf_size {
+
+                            while self.memory_object.as_ref().unwrap().lock().await.size < resp.buf_size {
                                 sequence += 1;
                                 if let Some(resp) = self.service.as_ref().unwrap().get_response(stream_id + sequence).await {
                                     let resp = MemoryCopyResponseHeader::from(resp.data);
-
+                                    let seq =  resp.sequence;
                                     self.memory_object.as_ref().unwrap().lock().await.append(resp);
                                 } else {
-                                    panic!("packet missing in memcpy buffer constructor. Trying to access {:?}", stream_id + sequence)
+                                    debug!("packet missing in memcpy buffer constructor. Trying to access {:?}", stream_id + sequence)
                                 }
                             }
 

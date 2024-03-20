@@ -1,3 +1,4 @@
+#![feature(slice_first_last_chunk)]
 pub(crate) mod cap_table;
 pub(crate) mod packet_types;
 
@@ -6,7 +7,7 @@ pub mod object;
 pub mod service;
 pub mod config;
 
-pub(crate) const MEMCOPY_BUFFER_SIZE: usize = 4096;
+pub const MEMCOPY_BUFFER_SIZE: usize = 4096;
 
 // export objects in crate base mod
 #[allow(unused_imports)]

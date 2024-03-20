@@ -203,7 +203,7 @@ pub mod tcap {
             let receiver_handle = tokio::spawn(async move {
                 debug!("Start receiver Thread");
                 loop {
-                    let mut buf = Vec::with_capacity(2048);
+                    let mut buf = Vec::with_capacity(10000);
 
                     match s.socket.recv_buf_from(&mut buf).await {
                         Ok((received_bytes, sender)) => {
